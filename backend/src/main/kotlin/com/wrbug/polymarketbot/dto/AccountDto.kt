@@ -135,3 +135,47 @@ data class PositionListResponse(
     val historyPositions: List<AccountPositionDto>
 )
 
+/**
+ * 仓位卖出请求
+ */
+data class PositionSellRequest(
+    val accountId: Long,           // 账户ID（必需）
+    val marketId: String,          // 市场ID（必需）
+    val side: String,              // 方向：YES 或 NO（必需）
+    val orderType: String,         // 订单类型：MARKET（市价）或 LIMIT（限价）（必需）
+    val quantity: String,          // 卖出数量（必需，BigDecimal字符串）
+    val price: String? = null      // 限价价格（限价订单必需，市价订单不需要）
+)
+
+/**
+ * 仓位卖出响应
+ */
+data class PositionSellResponse(
+    val orderId: String,            // 订单ID
+    val marketId: String,          // 市场ID
+    val side: String,               // 方向
+    val orderType: String,         // 订单类型
+    val quantity: String,          // 订单数量
+    val price: String?,             // 订单价格（限价订单）
+    val status: String,             // 订单状态
+    val createdAt: Long             // 创建时间戳
+)
+
+/**
+ * 市场价格请求
+ */
+data class MarketPriceRequest(
+    val marketId: String  // 市场ID
+)
+
+/**
+ * 市场价格响应
+ */
+data class MarketPriceResponse(
+    val marketId: String,
+    val lastPrice: String?,    // 最新成交价
+    val bestBid: String?,      // 最优买价（用于卖出参考）
+    val bestAsk: String?,      // 最优卖价（用于买入参考）
+    val midpoint: String?      // 中间价
+)
+

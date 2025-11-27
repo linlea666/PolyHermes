@@ -12,18 +12,25 @@ interface PolymarketClobApi {
     
     /**
      * 获取订单簿
+     * 注意：Polymarket CLOB API 的 /book 接口需要 token_id 参数
+     * 但我们先尝试使用 market 参数，如果不支持再修改
      */
     @GET("/book")
     suspend fun getOrderbook(
-        @Query("market") market: String
+        @Query("token_id") tokenId: String? = null,
+        @Query("market") market: String? = null
     ): Response<OrderbookResponse>
     
     /**
      * 获取价格信息
+     * 注意：Polymarket CLOB API 的 /price 接口需要 token_id 和 side 参数
+     * 但我们使用订单簿来获取价格，因为订单簿支持 market 参数
      */
     @GET("/price")
     suspend fun getPrice(
-        @Query("market") market: String
+        @Query("token_id") tokenId: String? = null,
+        @Query("side") side: String? = null,
+        @Query("market") market: String? = null
     ): Response<PriceResponse>
     
     /**

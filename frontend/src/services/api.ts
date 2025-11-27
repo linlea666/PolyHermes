@@ -97,7 +97,19 @@ export const apiService = {
      * 查询所有账户的仓位列表
      */
     positionsList: () => 
-      apiClient.post<ApiResponse<any>>('/copy-trading/accounts/positions/list', {})
+      apiClient.post<ApiResponse<any>>('/copy-trading/accounts/positions/list', {}),
+    
+    /**
+     * 卖出仓位
+     */
+    sellPosition: (data: any) => 
+      apiClient.post<ApiResponse<any>>('/copy-trading/accounts/positions/sell', data),
+    
+    /**
+     * 获取市场价格
+     */
+    getMarketPrice: (data: any) => 
+      apiClient.post<ApiResponse<any>>('/copy-trading/accounts/markets/price', data)
   },
   
   /**

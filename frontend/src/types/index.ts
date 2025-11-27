@@ -188,6 +188,50 @@ export interface PositionListResponse {
 }
 
 /**
+ * 仓位卖出请求
+ */
+export interface PositionSellRequest {
+  accountId: number
+  marketId: string
+  side: 'YES' | 'NO'
+  orderType: 'MARKET' | 'LIMIT'
+  quantity: string
+  price?: string  // 限价订单必需
+}
+
+/**
+ * 仓位卖出响应
+ */
+export interface PositionSellResponse {
+  orderId: string
+  marketId: string
+  side: string
+  orderType: string
+  quantity: string
+  price?: string
+  status: string
+  createdAt: number
+}
+
+/**
+ * 市场价格请求
+ */
+export interface MarketPriceRequest {
+  marketId: string
+}
+
+/**
+ * 市场价格响应
+ */
+export interface MarketPriceResponse {
+  marketId: string
+  lastPrice?: string
+  bestBid?: string
+  bestAsk?: string
+  midpoint?: string
+}
+
+/**
  * 仓位推送消息类型
  */
 export type PositionPushMessageType = 'FULL' | 'INCREMENTAL'

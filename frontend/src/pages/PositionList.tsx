@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Card, Table, Tag, message, Space, Input, Radio, Select, Button, Row, Col, Empty } from 'antd'
+import { Card, Table, Tag, message, Space, Input, Radio, Select, Button, Row, Col, Empty, Modal, Form } from 'antd'
 import { SearchOutlined, AppstoreOutlined, UnorderedListOutlined, UpOutlined, DownOutlined } from '@ant-design/icons'
 import { apiService } from '../services/api'
-import type { AccountPosition, Account, PositionPushMessage } from '../types'
+import type { AccountPosition, Account, PositionPushMessage, PositionSellRequest, MarketPriceResponse } from '../types'
 import { getPositionKey } from '../types'
 import { useMediaQuery } from 'react-responsive'
 import { useWebSocketSubscription } from '../hooks/useWebSocket'
@@ -23,6 +23,14 @@ const PositionList: React.FC = () => {
   const [selectedAccountId, setSelectedAccountId] = useState<number | undefined>(undefined)
   const [viewMode, setViewMode] = useState<ViewMode>(isMobile ? 'card' : 'list')
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
+  const [sellModalVisible, setSellModalVisible] = useState(false)
+  const [selectedPosition, setSelectedPosition] = useState<AccountPosition | null>(null)
+  const [marketPrice, setMarketPrice] = useState<MarketPriceResponse | null>(null)
+  const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT'>('LIMIT')
+  const [sellQuantity, setSellQuantity] = useState<string>('')
+  const [limitPrice, setLimitPrice] = useState<string>('')
+  const [form] = Form.useForm()
+  const [submitting, setSubmitting] = useState(false)
   const [wsConnected, setWsConnected] = useState(false)
   
   useEffect(() => {
@@ -232,6 +240,127 @@ const PositionList: React.FC = () => {
       return newSet
     })
   }
+
+  // 处理卖出按钮点击
+  const handleSellClick = async (position: AccountPosition) => {
+    setSelectedPosition(position)
+    setSellModalVisible(true)
+    setOrderType('LIMIT')
+    setSellQuantity('')
+    setLimitPrice('')
+    form.resetFields()
+    
+    // 加载市场价格
+    try {
+      const response = await apiService.accounts.getMarketPrice({ marketId: position.marketId })
+      if (response.data.code === 0 && response.data.data) {
+        setMarketPrice(response.data.data)
+        // 默认使用最优买价作为限价
+        if (response.data.data.bestBid) {
+          setLimitPrice(response.data.data.bestBid)
+          form.setFieldsValue({ limitPrice: response.data.data.bestBid })
+        }
+      }
+    } catch (error: any) {
+      message.error('获取市场价格失败: ' + (error.message || '未知错误'))
+    }
+  }
+
+  // 处理数量快捷按钮
+  const handleQuantityQuickSelect = (percent: number) => {
+    if (!selectedPosition) return
+    const quantity = parseFloat(selectedPosition.quantity)
+    const sellQty = (quantity * percent / 100).toFixed(4)
+    setSellQuantity(sellQty)
+    form.setFieldsValue({ quantity: sellQty })
+    // 使用当前卖出价格计算收益
+    const price = getCurrentSellPrice()
+    if (price && price !== '0') {
+      calculatePnl(sellQty, price)
+    }
+  }
+
+  // 计算平仓收益
+  const calculatePnl = (quantity: string, price: string) => {
+    if (!selectedPosition || !quantity || !price) return { pnl: 0, percentPnl: 0 }
+    
+    const avgPrice = parseFloat(selectedPosition.avgPrice || '0')
+    const sellPrice = parseFloat(price || '0')
+    const qty = parseFloat(quantity || '0')
+    
+    // 验证数据有效性
+    if (isNaN(avgPrice) || isNaN(sellPrice) || isNaN(qty) || avgPrice <= 0 || sellPrice <= 0 || qty <= 0) {
+      return { pnl: 0, percentPnl: 0 }
+    }
+    
+    // 计算收益：收益金额 = (卖出价格 - 平均买入价格) × 卖出数量
+    const pnl = (sellPrice - avgPrice) * qty
+    // 计算收益率：收益率 = (卖出价格 - 平均买入价格) / 平均买入价格 × 100%
+    const percentPnl = ((sellPrice - avgPrice) / avgPrice) * 100
+    
+    return { pnl, percentPnl }
+  }
+
+  // 获取当前卖出价格（市价或限价）
+  // 卖出操作应该使用 bestBid（最优买价），因为你要卖给愿意买入的人
+  const getCurrentSellPrice = (): string => {
+    if (orderType === 'MARKET') {
+      // 市价订单（卖出）：优先使用最优买价（bestBid），因为卖出是卖给买单
+      // 如果没有 bestBid，则使用当前价格，最后使用最新成交价
+      return marketPrice?.bestBid || selectedPosition?.currentPrice || marketPrice?.lastPrice || '0'
+    }
+    return limitPrice || '0'
+  }
+
+  // 提交卖出订单
+  const handleSellSubmit = async () => {
+    if (!selectedPosition || submitting) return
+    
+    try {
+      await form.validateFields()
+      
+      setSubmitting(true)
+      
+      const request: PositionSellRequest = {
+        accountId: selectedPosition.accountId,
+        marketId: selectedPosition.marketId,
+        side: selectedPosition.side as 'YES' | 'NO',
+        orderType: orderType,
+        quantity: sellQuantity,
+        price: orderType === 'LIMIT' ? limitPrice : undefined
+      }
+      
+      const response = await apiService.accounts.sellPosition(request)
+      
+      if (response.data.code === 0) {
+        message.success('卖出订单创建成功')
+        setSellModalVisible(false)
+        // 重置表单
+        setSellQuantity('')
+        setLimitPrice('')
+        form.resetFields()
+        // 仓位列表会通过WebSocket自动更新
+      } else {
+        message.error(response.data.msg || '创建卖出订单失败')
+      }
+    } catch (error: any) {
+      if (error.errorFields) {
+        // 表单验证错误
+        return
+      }
+      message.error('创建卖出订单失败: ' + (error.message || '未知错误'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // 实时计算收益（用于显示）
+  const currentPnl = useMemo(() => {
+    if (!selectedPosition || !sellQuantity) return { pnl: 0, percentPnl: 0 }
+    const price = getCurrentSellPrice()
+    if (!price || price === '0') return { pnl: 0, percentPnl: 0 }
+    return calculatePnl(sellQuantity, price)
+  }, [selectedPosition, sellQuantity, orderType, limitPrice, marketPrice])
 
   // 渲染卡片视图
   const renderCardView = () => {
@@ -477,14 +606,27 @@ const PositionList: React.FC = () => {
                   </div>
                 )}
 
-                {/* 状态标签（移动端折叠时隐藏） */}
-                {positionFilter === 'current' && !shouldCollapse && (position.redeemable || position.mergeable) && (
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {/* 操作按钮（移动端折叠时隐藏） */}
+                {positionFilter === 'current' && !shouldCollapse && (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                    <Button 
+                      type="primary" 
+                      danger 
+                      size="small"
+                      block={isMobile}
+                      onClick={() => handleSellClick(position)}
+                    >
+                      卖出
+                    </Button>
                     {position.redeemable && (
-                      <Tag color="green" style={{ margin: 0 }}>可赎回</Tag>
-                    )}
-                    {position.mergeable && (
-                      <Tag color="blue" style={{ margin: 0 }}>可合并</Tag>
+                      <Button 
+                        type="default" 
+                        size="small"
+                        block={isMobile}
+                        onClick={() => message.info('赎回功能开发中')}
+                      >
+                        赎回
+                      </Button>
                     )}
                   </div>
                 )}
@@ -715,18 +857,34 @@ const PositionList: React.FC = () => {
       )
     }
     
-    // 只有当前仓位才显示状态列
+    // 只有当前仓位才显示操作列
     if (positionFilter === 'current') {
       baseColumns.push({
-        title: '状态',
-        key: 'status',
+        title: '操作',
+        key: 'action',
         render: (_: any, record: AccountPosition) => (
           <Space size="small">
-            {record.redeemable && <Tag color="green">可赎回</Tag>}
-            {record.mergeable && <Tag color="blue">可合并</Tag>}
+            <Button 
+              type="primary" 
+              danger 
+              size="small"
+              onClick={() => handleSellClick(record)}
+            >
+              卖出
+            </Button>
+            {record.redeemable && (
+              <Button 
+                type="default" 
+                size="small"
+                onClick={() => message.info('赎回功能开发中')}
+              >
+                赎回
+              </Button>
+            )}
           </Space>
         ),
-        width: 120
+        width: 150,
+        fixed: isMobile ? ('right' as const) : undefined
       })
     }
     
@@ -939,6 +1097,197 @@ const PositionList: React.FC = () => {
           />
         </Card>
       )}
+      
+      {/* 出售模态框 */}
+      <Modal
+        title={`出售仓位 - ${selectedPosition?.marketTitle || selectedPosition?.marketId || ''}`}
+        open={sellModalVisible}
+        onCancel={() => {
+          if (!submitting) {
+            setSellModalVisible(false)
+          }
+        }}
+        onOk={handleSellSubmit}
+        okText="确认卖出"
+        cancelText="取消"
+        width={isMobile ? '90%' : 600}
+        destroyOnClose
+        confirmLoading={submitting}
+        maskClosable={!submitting}
+      >
+        {selectedPosition && (
+          <Form form={form} layout="vertical">
+            <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '8px' }}>
+              <div style={{ marginBottom: '8px' }}>
+                <span style={{ color: '#666' }}>账户: </span>
+                <span style={{ fontWeight: '500' }}>{selectedPosition.accountName || `账户 ${selectedPosition.accountId}`}</span>
+              </div>
+              <div style={{ marginBottom: '8px' }}>
+                <span style={{ color: '#666' }}>方向: </span>
+                <Tag color={getSideColor(selectedPosition.side)}>{selectedPosition.side}</Tag>
+              </div>
+              <div style={{ marginBottom: '8px' }}>
+                <span style={{ color: '#666' }}>当前持仓: </span>
+                <span style={{ fontWeight: '500' }}>{formatNumber(selectedPosition.quantity, 4)}</span>
+              </div>
+              <div style={{ marginBottom: '8px' }}>
+                <span style={{ color: '#666' }}>平均价格: </span>
+                <span style={{ fontWeight: '500' }}>{formatNumber(selectedPosition.avgPrice, 4)}</span>
+              </div>
+              {selectedPosition.currentPrice && (
+                <div>
+                  <span style={{ color: '#666' }}>当前价格: </span>
+                  <span style={{ fontWeight: '500' }}>{formatNumber(selectedPosition.currentPrice, 4)}</span>
+                </div>
+              )}
+            </div>
+            
+            <Form.Item label="订单类型" required>
+              <Radio.Group 
+                value={orderType} 
+                onChange={(e) => {
+                  setOrderType(e.target.value)
+                  // 切换订单类型时重新计算收益
+                  if (sellQuantity) {
+                    const price = e.target.value === 'MARKET' 
+                      ? (marketPrice?.bestBid || selectedPosition?.currentPrice || marketPrice?.lastPrice || '0')
+                      : limitPrice || '0'
+                    calculatePnl(sellQuantity, price)
+                  }
+                }}
+              >
+                <Radio value="MARKET">市价出售</Radio>
+                <Radio value="LIMIT">限价出售</Radio>
+              </Radio.Group>
+            </Form.Item>
+            
+            <Form.Item 
+              label="卖出数量" 
+              name="quantity"
+              rules={[
+                { required: true, message: '请输入卖出数量' },
+                { 
+                  validator: (_, value) => {
+                    if (!value || parseFloat(value) <= 0) {
+                      return Promise.reject('卖出数量必须大于0')
+                    }
+                    if (parseFloat(value) > parseFloat(selectedPosition.quantity)) {
+                      return Promise.reject('卖出数量不能超过持仓数量')
+                    }
+                    return Promise.resolve()
+                  }
+                }
+              ]}
+            >
+              <Input
+                value={sellQuantity}
+                onChange={(e) => {
+                  const newQuantity = e.target.value
+                  setSellQuantity(newQuantity)
+                  if (newQuantity) {
+                    const price = getCurrentSellPrice()
+                    calculatePnl(newQuantity, price)
+                  }
+                }}
+                placeholder="请输入卖出数量"
+                suffix={
+                  <Space size="small">
+                    <Button size="small" onClick={() => handleQuantityQuickSelect(20)}>20%</Button>
+                    <Button size="small" onClick={() => handleQuantityQuickSelect(50)}>50%</Button>
+                    <Button size="small" onClick={() => handleQuantityQuickSelect(80)}>80%</Button>
+                    <Button size="small" onClick={() => handleQuantityQuickSelect(100)}>100%</Button>
+                  </Space>
+                }
+              />
+            </Form.Item>
+            
+            {orderType === 'LIMIT' && (
+              <Form.Item 
+                label="限价价格" 
+                name="limitPrice"
+                rules={[
+                  { required: true, message: '请输入限价价格' },
+                  { 
+                    validator: (_, value) => {
+                      if (!value || parseFloat(value) <= 0) {
+                        return Promise.reject('价格必须大于0')
+                      }
+                      return Promise.resolve()
+                    }
+                  }
+                ]}
+              >
+                <Input
+                  value={limitPrice}
+                  onChange={(e) => {
+                    const newPrice = e.target.value
+                    setLimitPrice(newPrice)
+                    if (sellQuantity && newPrice) {
+                      calculatePnl(sellQuantity, newPrice)
+                    }
+                  }}
+                  placeholder="请输入限价价格"
+                />
+                {marketPrice?.bestBid && (
+                  <div style={{ marginTop: '4px', fontSize: '12px', color: '#999' }}>
+                    参考价格（最优买价，卖出参考）: {formatNumber(marketPrice.bestBid, 4)}
+                  </div>
+                )}
+              </Form.Item>
+            )}
+            
+            {orderType === 'MARKET' && (
+              <div style={{ marginBottom: '16px', padding: '12px', background: '#f0f7ff', borderRadius: '8px' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>市价参考（卖出）</div>
+                <div style={{ fontSize: '14px' }}>
+                  {marketPrice?.bestBid ? (
+                    <>最优买价（卖出参考）: <span style={{ fontWeight: '500' }}>{formatNumber(marketPrice.bestBid, 4)}</span></>
+                  ) : selectedPosition?.currentPrice ? (
+                    <>当前价格: <span style={{ fontWeight: '500' }}>{formatNumber(selectedPosition.currentPrice, 4)}</span></>
+                  ) : marketPrice?.lastPrice ? (
+                    <>最新成交价: <span style={{ fontWeight: '500' }}>{formatNumber(marketPrice.lastPrice, 4)}</span></>
+                  ) : (
+                    <span style={{ color: '#999' }}>暂无价格数据</span>
+                  )}
+                </div>
+                {marketPrice?.bestAsk && (
+                  <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
+                    最优卖价（买入参考）: {formatNumber(marketPrice.bestAsk, 4)}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* 预计平仓收益 */}
+            {sellQuantity && (
+              <div style={{ 
+                marginTop: '16px', 
+                padding: '16px', 
+                background: currentPnl.pnl >= 0 ? 'rgba(82, 196, 26, 0.08)' : 'rgba(245, 34, 45, 0.08)',
+                border: `1px solid ${currentPnl.pnl >= 0 ? 'rgba(82, 196, 26, 0.2)' : 'rgba(245, 34, 45, 0.2)'}`,
+                borderRadius: '8px'
+              }}>
+                <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>预计平仓收益</div>
+                <div style={{ 
+                  fontSize: '20px', 
+                  fontWeight: 'bold',
+                  color: currentPnl.pnl >= 0 ? '#52c41a' : '#f5222d',
+                  marginBottom: '4px'
+                }}>
+                  {currentPnl.pnl >= 0 ? '+' : ''}{currentPnl.pnl.toFixed(2)} USDC
+                </div>
+                <div style={{ 
+                  fontSize: '14px',
+                  color: currentPnl.percentPnl >= 0 ? '#52c41a' : '#f5222d',
+                  fontWeight: '500'
+                }}>
+                  {currentPnl.percentPnl >= 0 ? '+' : ''}{currentPnl.percentPnl.toFixed(2)}%
+                </div>
+              </div>
+            )}
+          </Form>
+        )}
+      </Modal>
     </div>
   )
 }

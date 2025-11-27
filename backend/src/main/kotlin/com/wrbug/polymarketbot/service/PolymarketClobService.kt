@@ -19,10 +19,11 @@ class PolymarketClobService(
     
     /**
      * 获取订单簿
+     * 使用 market 参数（condition ID）
      */
     suspend fun getOrderbook(market: String): Result<OrderbookResponse> {
         return try {
-            val response = clobApi.getOrderbook(market)
+            val response = clobApi.getOrderbook(tokenId = null, market = market)
             if (response.isSuccessful && response.body() != null) {
                 Result.success(response.body()!!)
             } else {

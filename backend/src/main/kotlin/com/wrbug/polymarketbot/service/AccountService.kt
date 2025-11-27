@@ -649,6 +649,165 @@ class AccountService(
     }
 
     /**
+     * 卖出仓位
+     */
+    suspend fun sellPosition(request: PositionSellRequest): Result<PositionSellResponse> {
+        return try {
+            // 1. 验证账户是否存在且已配置API凭证
+            val account = accountRepository.findById(request.accountId).orElse(null)
+                ?: return Result.failure(IllegalArgumentException("账户不存在"))
+            
+            if (account.apiKey == null || account.apiSecret == null || account.apiPassphrase == null) {
+                return Result.failure(IllegalStateException("账户未配置API凭证，无法创建订单"))
+            }
+            
+            // 2. 验证仓位是否存在且数量足够
+            val positionsResult = getAllPositions()
+            positionsResult.fold(
+                onSuccess = { positionListResponse ->
+                    val position = positionListResponse.currentPositions.find { 
+                        it.accountId == request.accountId && 
+                        it.marketId == request.marketId && 
+                        it.side == request.side 
+                    }
+                    
+                    if (position == null) {
+                        return Result.failure(IllegalArgumentException("仓位不存在"))
+                    }
+                    
+                    val positionQuantity = position.quantity.toSafeBigDecimal()
+                    val sellQuantity = request.quantity.toSafeBigDecimal()
+                    
+                    if (sellQuantity <= BigDecimal.ZERO) {
+                        return Result.failure(IllegalArgumentException("卖出数量必须大于0"))
+                    }
+                    
+                    if (sellQuantity > positionQuantity) {
+                        return Result.failure(IllegalArgumentException("卖出数量不能超过持仓数量"))
+                    }
+                },
+                onFailure = { e ->
+                    return Result.failure(Exception("查询仓位失败: ${e.message}"))
+                }
+            )
+            
+            // 3. 确定卖出价格
+            val sellPrice = if (request.orderType == "MARKET") {
+                // 市价订单：获取当前最优买价
+                val priceResult = clobService.getPrice(request.marketId)
+                priceResult.fold(
+                    onSuccess = { priceResponse ->
+                        priceResponse.bestBid ?: priceResponse.lastPrice
+                            ?: return Result.failure(IllegalStateException("无法获取市场价格，请稍后重试"))
+                    },
+                    onFailure = { e ->
+                        return Result.failure(Exception("获取市场价格失败: ${e.message}"))
+                    }
+                )
+            } else {
+                // 限价订单：使用用户输入的价格
+                request.price ?: return Result.failure(IllegalArgumentException("限价订单必须提供价格"))
+            }
+            
+            // 4. 验证价格
+            val priceDecimal = sellPrice.toSafeBigDecimal()
+            if (priceDecimal <= BigDecimal.ZERO) {
+                return Result.failure(IllegalArgumentException("价格必须大于0"))
+            }
+            
+            // 5. 创建订单请求
+            val orderRequest = com.wrbug.polymarketbot.api.CreateOrderRequest(
+                market = request.marketId,
+                side = "SELL",  // 卖出订单
+                price = sellPrice,
+                size = request.quantity,
+                type = if (request.orderType == "MARKET") "MARKET" else "LIMIT"
+            )
+            
+            // 6. 使用账户的API凭证创建订单
+            val clobApi = retrofitFactory.createClobApi(
+                account.apiKey!!,
+                account.apiSecret!!,
+                account.apiPassphrase!!,
+                account.walletAddress
+            )
+            
+            val orderResponse = clobApi.createOrder(orderRequest)
+            
+            if (orderResponse.isSuccessful && orderResponse.body() != null) {
+                val order = orderResponse.body()!!
+                Result.success(
+                    PositionSellResponse(
+                        orderId = order.id,
+                        marketId = request.marketId,
+                        side = request.side,
+                        orderType = request.orderType,
+                        quantity = request.quantity,
+                        price = if (request.orderType == "LIMIT") sellPrice else null,
+                        status = order.status,
+                        createdAt = System.currentTimeMillis()
+                    )
+                )
+            } else {
+                Result.failure(Exception("创建订单失败: ${orderResponse.code()} ${orderResponse.message()}"))
+            }
+        } catch (e: Exception) {
+            logger.error("卖出仓位异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 获取市场价格
+     * 使用 Gamma API 获取价格信息，因为 Gamma API 支持 condition_ids 参数
+     */
+    suspend fun getMarketPrice(marketId: String): Result<MarketPriceResponse> {
+        return try {
+            // 使用 Gamma API 获取市场信息（支持 condition_ids 参数）
+            val gammaApi = retrofitFactory.createGammaApi()
+            val response = gammaApi.listMarkets(conditionIds = listOf(marketId))
+            
+            if (response.isSuccessful && response.body() != null) {
+                val markets = response.body()!!
+                val market = markets.firstOrNull()
+                
+                if (market != null) {
+                    // 从 Gamma API 响应中提取价格信息
+                    val bestBid = market.bestBid?.toString()
+                    val bestAsk = market.bestAsk?.toString()
+                    val lastPrice = market.lastTradePrice?.toString()
+                    
+                    // 计算中间价 = (bestBid + bestAsk) / 2
+                    val midpoint = if (bestBid != null && bestAsk != null) {
+                        val bid = bestBid.toSafeBigDecimal()
+                        val ask = bestAsk.toSafeBigDecimal()
+                        bid.add(ask).divide(BigDecimal("2"), 8, java.math.RoundingMode.HALF_UP).toString()
+                    } else {
+                        null
+                    }
+                    
+                    Result.success(
+                        MarketPriceResponse(
+                            marketId = marketId,
+                            lastPrice = lastPrice,
+                            bestBid = bestBid,
+                            bestAsk = bestAsk,
+                            midpoint = midpoint
+                        )
+                    )
+                } else {
+                    Result.failure(Exception("未找到市场信息: $marketId"))
+                }
+            } else {
+                Result.failure(Exception("获取市场价格失败: ${response.code()} ${response.message()}"))
+            }
+        } catch (e: Exception) {
+            logger.error("获取市场价格异常: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
      * 检查账户是否有活跃订单
      * 使用账户的 API Key 查询该账户的活跃订单
      */
