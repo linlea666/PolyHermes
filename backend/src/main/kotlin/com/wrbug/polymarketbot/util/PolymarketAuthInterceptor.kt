@@ -99,13 +99,6 @@ class PolymarketAuthInterceptor(
             .header("User-Agent", "@polymarket/clob-client")
             .header("Accept", "*/*")
             .header("Connection", "keep-alive")
-            .header("Content-Type", "application/json")
-            .apply {
-                // GET 请求添加 Accept-Encoding: gzip
-                if (method == "GET") {
-                    header("Accept-Encoding", "gzip")
-                }
-            }
         
         // 如果有请求体，重新设置请求体
         if (newRequestBody != null) {

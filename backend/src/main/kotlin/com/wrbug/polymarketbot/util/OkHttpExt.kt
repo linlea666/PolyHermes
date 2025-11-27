@@ -11,6 +11,19 @@ import java.util.concurrent.TimeUnit
 import javax.net.ssl.*
 
 /**
+ * 获取代理配置（用于 WebSocket 和 HTTP 请求）
+ * @return Proxy 对象，如果未启用代理则返回 null
+ */
+fun getProxyConfig(): Proxy? {
+    if (getEnv("ENABLE_PROXY") != "1") {
+        return null
+    }
+    val host = getEnv("PROXY_HOST").ifEmpty { "127.0.0.1" }
+    val port = getEnv("PROXY_PORT").toIntOrNull() ?: 8888
+    return Proxy(Proxy.Type.HTTP, InetSocketAddress(host, port))
+}
+
+/**
  * 创建OkHttpClient客户端
  * @return OkHttpClient.Builder
  */

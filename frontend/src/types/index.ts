@@ -210,3 +210,51 @@ export function getPositionKey(position: AccountPosition): string {
   return `${position.accountId}-${position.marketId}-${position.side}`
 }
 
+/**
+ * Polymarket 订单消息（来自 WebSocket User Channel）
+ */
+export interface OrderMessage {
+  asset_id: string
+  associate_trades?: string[]
+  event_type: string  // "order"
+  id: string  // order id
+  market: string  // condition ID of market
+  order_owner: string  // owner of order
+  original_size: string  // original order size
+  outcome: string  // outcome
+  owner: string  // owner of orders
+  price: string  // price of order
+  side: string  // BUY/SELL
+  size_matched: string  // size of order that has been matched
+  timestamp: string  // time of event
+  type: string  // PLACEMENT/UPDATE/CANCELLATION
+}
+
+/**
+ * 订单详情（通过 API 获取）
+ */
+export interface OrderDetail {
+  id: string  // 订单 ID
+  market: string  // 市场 ID (condition ID)
+  side: string  // BUY/SELL
+  price: string  // 价格
+  size: string  // 订单大小
+  filled: string  // 已成交数量
+  status: string  // 订单状态
+  createdAt: string  // 创建时间（ISO 8601 格式）
+  marketName?: string  // 市场名称
+  marketSlug?: string  // 市场 slug
+  marketIcon?: string  // 市场图标
+}
+
+/**
+ * 订单推送消息
+ */
+export interface OrderPushMessage {
+  accountId: number
+  accountName: string
+  order: OrderMessage  // 订单信息（来自 WebSocket）
+  orderDetail?: OrderDetail  // 订单详情（通过 API 获取）
+  timestamp?: number  // 推送时间戳
+}
+

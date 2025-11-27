@@ -1,5 +1,6 @@
 package com.wrbug.polymarketbot.api
 
+import com.google.gson.annotations.SerializedName
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -59,11 +60,15 @@ interface PolymarketClobApi {
     
     /**
      * 获取订单信息
+     * 文档: https://docs.polymarket.com/developers/CLOB/orders/get-order
+     * 端点: GET /data/order/{order_hash}
+     * 需要 L2 认证
+     * 注意：实际返回格式是直接返回 OpenOrder 对象，不是包装在 { "order": ... } 中
      */
-    @GET("/orders/{orderId}")
+    @GET("/data/order/{orderId}")
     suspend fun getOrder(
         @Path("orderId") orderId: String
-    ): Response<OrderResponse>
+    ): Response<OpenOrder>
     
     /**
      * 获取活跃订单
@@ -189,6 +194,36 @@ data class OrderResponse(
     val filled: String,
     val status: String,
     val createdAt: String  // ISO 8601 格式字符串
+)
+
+/**
+ * OpenOrder 对象（根据实际 API 返回）
+ * 文档: https://docs.polymarket.com/developers/CLOB/orders/get-order
+ * 注意：实际返回格式是直接返回订单对象，不是包装在 { "order": ... } 中
+ */
+data class OpenOrder(
+    val id: String,                              // order id
+    val status: String,                          // order current status (LIVE, FILLED, CANCELLED, etc.)
+    val owner: String,                           // api key
+    @SerializedName("maker_address")
+    val makerAddress: String,                    // maker address (funder)
+    val market: String,                          // market id (condition id)
+    @SerializedName("asset_id")
+    val assetId: String,                         // token id
+    val side: String,                            // BUY or SELL
+    @SerializedName("original_size")
+    val originalSize: String,                    // original order size at placement
+    @SerializedName("size_matched")
+    val sizeMatched: String,                     // size of order that has been matched/filled
+    val price: String,                           // price
+    val outcome: String,                         // human readable outcome the order is for
+    val expiration: String,                       // unix timestamp when the order expired, 0 if it does not expire
+    @SerializedName("order_type")
+    val orderType: String,                        // order type (GTC, FOK, GTD)
+    @SerializedName("associate_trades")
+    val associateTrades: List<String>? = null,  // any Trade id the order has been partially included in
+    @SerializedName("created_at")
+    val createdAt: Long                          // unix timestamp when the order was created
 )
 
 data class CancelOrderResponse(

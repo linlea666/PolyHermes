@@ -37,6 +37,9 @@ data class Account(
     @Column(name = "is_default", nullable = false)
     val isDefault: Boolean = false,  // 是否默认账户
     
+    @Column(name = "is_enabled", nullable = false)
+    val isEnabled: Boolean = true,  // 是否启用（用于订单推送等功能的开关）
+    
     @Column(name = "created_at", nullable = false)
     val createdAt: Long = System.currentTimeMillis(),
     

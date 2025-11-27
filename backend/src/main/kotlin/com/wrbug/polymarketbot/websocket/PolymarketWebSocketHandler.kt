@@ -1,11 +1,9 @@
 package com.wrbug.polymarketbot.websocket
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.*
-import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -13,9 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
  * 转发前端 WebSocket 连接到 Polymarket RTDS
  */
 @Component
-class PolymarketWebSocketHandler(
-    private val objectMapper: ObjectMapper
-) : WebSocketHandler {
+class PolymarketWebSocketHandler : WebSocketHandler {
     
     private val logger = LoggerFactory.getLogger(PolymarketWebSocketHandler::class.java)
     
@@ -33,13 +29,13 @@ class PolymarketWebSocketHandler(
         try {
             // 创建到 Polymarket 的 WebSocket 连接
             val polymarketClient = PolymarketWebSocketClient(
-                URI(polymarketWsUrl),
-                objectMapper,
-                session.id
-            ) { message ->
-                // 当收到 Polymarket 消息时，转发给客户端
-                forwardToClient(session.id, message)
-            }
+                url = polymarketWsUrl,
+                sessionId = session.id,
+                onMessage = { message ->
+                    // 当收到 Polymarket 消息时，转发给客户端
+                    forwardToClient(session.id, message)
+                }
+            )
             
             polymarketConnections[session.id] = polymarketClient
             

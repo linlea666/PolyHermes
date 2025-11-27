@@ -1,5 +1,6 @@
 package com.wrbug.polymarketbot.service
 
+import com.wrbug.polymarketbot.dto.OrderPushMessage
 import com.wrbug.polymarketbot.dto.PositionPushMessage
 import com.wrbug.polymarketbot.dto.WebSocketMessage as WsMessage
 import com.wrbug.polymarketbot.dto.WebSocketMessageType
@@ -14,7 +15,8 @@ import java.util.concurrent.ConcurrentHashMap
  */
 @Service
 class WebSocketSubscriptionService(
-    private val positionPushService: PositionPushService
+    private val positionPushService: PositionPushService,
+    private val orderPushService: OrderPushService
 ) {
     
     private val logger = LoggerFactory.getLogger(WebSocketSubscriptionService::class.java)
@@ -30,6 +32,9 @@ class WebSocketSubscriptionService(
     
     // 存储每个频道的订阅会话数：channel -> Set<sessionId>
     private val channelSubscriptions = ConcurrentHashMap<String, MutableSet<String>>()
+    
+    // 存储 order 频道的订阅回调：sessionId -> callback（用于取消订阅）
+    private val orderChannelCallbacks = ConcurrentHashMap<String, (OrderPushMessage) -> Unit>()
     
     /**
      * 注册会话
@@ -51,6 +56,9 @@ class WebSocketSubscriptionService(
         channels.forEach { channel ->
             unsubscribe(sessionId, channel)
         }
+        
+        // 清理 order 频道的回调
+        orderChannelCallbacks.remove(sessionId)
         
         sessionCallbacks.remove(sessionId)
     }
@@ -92,6 +100,15 @@ class WebSocketSubscriptionService(
                     }
                 }
             }
+            "order" -> {
+                // 订单推送：自动订阅所有启用的账户
+                val callback: (OrderPushMessage) -> Unit = { message ->
+                    pushData(sessionId, channel, message)
+                }
+                orderChannelCallbacks[sessionId] = callback
+                orderPushService.subscribeAllEnabled(callback)
+                logger.info("已订阅所有启用账户的订单推送: $sessionId")
+            }
             else -> {
                 logger.warn("未知的频道: $channel")
                 sendSubscribeAck(sessionId, channel, false, "未知的频道")
@@ -112,6 +129,14 @@ class WebSocketSubscriptionService(
         // 取消推送服务的订阅（推送服务内部会处理是否停止轮询）
         when (channel) {
             "position" -> positionPushService.unsubscribe(sessionId)
+            "order" -> {
+                // 取消订阅所有账户的订单推送
+                val callback = orderChannelCallbacks.remove(sessionId)
+                if (callback != null) {
+                    orderPushService.unsubscribeAll(callback)
+                    logger.debug("已取消订阅订单推送: $sessionId -> $channel")
+                }
+            }
         }
     }
     

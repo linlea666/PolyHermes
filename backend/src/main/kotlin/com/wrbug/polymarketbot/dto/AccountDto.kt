@@ -7,7 +7,8 @@ data class AccountImportRequest(
     val privateKey: String,  // 私钥（前端加密后传输）
     val walletAddress: String,  // 钱包地址（前端从私钥推导，用于验证）
     val accountName: String? = null,
-    val isDefault: Boolean = false
+    val isDefault: Boolean = false,
+    val isEnabled: Boolean = true  // 是否启用（用于订单推送等功能的开关）
 )
 
 /**
@@ -16,7 +17,8 @@ data class AccountImportRequest(
 data class AccountUpdateRequest(
     val accountId: Long,
     val accountName: String? = null,
-    val isDefault: Boolean? = null
+    val isDefault: Boolean? = null,
+    val isEnabled: Boolean? = null  // 是否启用（用于订单推送等功能的开关）
 )
 
 /**
@@ -55,6 +57,7 @@ data class AccountDto(
     val walletAddress: String,
     val accountName: String?,
     val isDefault: Boolean,
+    val isEnabled: Boolean,  // 是否启用（用于订单推送等功能的开关）
     val apiKeyConfigured: Boolean,  // API Key 是否已配置（不返回实际 Key）
     val apiSecretConfigured: Boolean,  // API Secret 是否已配置
     val apiPassphraseConfigured: Boolean,  // API Passphrase 是否已配置

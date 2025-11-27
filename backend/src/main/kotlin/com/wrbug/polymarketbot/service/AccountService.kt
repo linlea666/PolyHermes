@@ -22,7 +22,8 @@ class AccountService(
     private val clobService: PolymarketClobService,
     private val retrofitFactory: RetrofitFactory,
     private val blockchainService: BlockchainService,
-    private val apiKeyService: PolymarketApiKeyService
+    private val apiKeyService: PolymarketApiKeyService,
+    private val orderPushService: OrderPushService
 ) {
 
     private val logger = LoggerFactory.getLogger(AccountService::class.java)
@@ -112,12 +113,16 @@ class AccountService(
                 apiPassphrase = apiKeyCreds.passphrase,
                 accountName = request.accountName,
                 isDefault = request.isDefault,
+                isEnabled = request.isEnabled,
                 createdAt = System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis()
             )
 
             val saved = accountRepository.save(account)
-            logger.info("成功导入账户: ${saved.id}, ${saved.walletAddress}, 代理地址: ${saved.proxyAddress}")
+            logger.info("成功导入账户: ${saved.id}, ${saved.walletAddress}, 代理地址: ${saved.proxyAddress}, 启用状态: ${saved.isEnabled}")
+
+            // 刷新订单推送订阅（如果账户启用且有 API 凭证）
+            orderPushService.refreshSubscriptions()
 
             Result.success(toDto(saved))
         } catch (e: Exception) {
@@ -147,14 +152,21 @@ class AccountService(
                 }
             }
 
+            // 更新启用状态
+            val updatedIsEnabled = request.isEnabled ?: account.isEnabled
+
             val updated = account.copy(
                 accountName = updatedAccountName,
                 isDefault = updatedIsDefault,
+                isEnabled = updatedIsEnabled,
                 updatedAt = System.currentTimeMillis()
             )
 
             val saved = accountRepository.save(updated)
-            logger.info("成功更新账户: ${saved.id}")
+            logger.info("成功更新账户: ${saved.id}, 启用状态: ${saved.isEnabled}")
+
+            // 刷新订单推送订阅（账户状态变更时）
+            orderPushService.refreshSubscriptions()
 
             Result.success(toDto(saved))
         } catch (e: Exception) {
@@ -193,6 +205,9 @@ class AccountService(
 
             accountRepository.delete(account)
             logger.info("成功删除账户: $accountId")
+
+            // 刷新订单推送订阅（账户删除时）
+            orderPushService.refreshSubscriptions()
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -370,6 +385,7 @@ class AccountService(
                 walletAddress = account.walletAddress,
                 accountName = account.accountName,
                 isDefault = account.isDefault,
+                isEnabled = account.isEnabled,
                 apiKeyConfigured = account.apiKey != null,
                 apiSecretConfigured = account.apiSecret != null,
                 apiPassphraseConfigured = account.apiPassphrase != null,

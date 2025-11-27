@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef } from 'react'
-import { wsManager, SubscriptionCallback } from '../services/websocket'
+import { wsManager } from '../services/websocket'
 
 /**
  * 使用 WebSocket 订阅
  */
 export function useWebSocketSubscription<T = any>(
   channel: string,
-  callback: SubscriptionCallback,
+  callback: (data: T) => void,
   payload?: any
 ): { connected: boolean } {
   const [connected, setConnected] = useState(wsManager.isConnected())
