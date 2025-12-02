@@ -28,7 +28,7 @@ services:
     image: mysql:8.2
     container_name: polymarket-bot-mysql
     ports:
-      - "${MYSQL_PORT:-3306}:3306"
+      - "${MYSQL_PORT:-3307}:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=${DB_PASSWORD:-rootpassword}
       - MYSQL_DATABASE=polymarket_bot

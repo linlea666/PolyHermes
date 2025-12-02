@@ -55,8 +55,8 @@ SPRING_PROFILES_ACTIVE=prod
 # 服务器端口（对外暴露的端口）
 SERVER_PORT=80
 
-# MySQL 端口（可选，用于外部连接）
-MYSQL_PORT=3306
+# MySQL 端口（可选，用于外部连接，默认 3307 避免与本地 MySQL 冲突）
+MYSQL_PORT=3307
 
 # Polygon RPC
 POLYGON_RPC_URL=https://polygon-rpc.com
