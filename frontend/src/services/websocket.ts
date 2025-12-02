@@ -325,17 +325,18 @@ class WebSocketManager {
   
   /**
    * 获取 WebSocket URL（带token认证）
-   * 支持通过环境变量 VITE_WS_URL 配置 WebSocket 地址
+   * 默认使用相对路径 /ws（通过反向代理转发）
+   * 如果设置了 VITE_WS_URL 环境变量，则使用完整 URL（用于跨域场景）
    */
   private getWebSocketUrl(): string {
     const envWsUrl = import.meta.env.VITE_WS_URL
     let wsBaseUrl: string
     
     if (envWsUrl) {
-      // 如果设置了环境变量，使用完整 URL
+      // 如果设置了环境变量，使用完整 URL（支持跨域）
       wsBaseUrl = envWsUrl
     } else {
-      // 否则使用相对路径（适用于开发环境代理或同域部署）
+      // 否则使用相对路径（通过反向代理转发）
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
       const host = window.location.host
       wsBaseUrl = `${protocol}//${host}`

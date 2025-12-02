@@ -150,7 +150,12 @@ JWT_SECRET=your-jwt-secret-key-change-in-production
 # 管理员密码重置密钥（生产环境必须修改）
 ADMIN_RESET_PASSWORD_KEY=your-admin-reset-key-change-in-production
 EOF
-        warn "请编辑 .env 文件配置相关参数"
+        error ".env 文件已创建，请先编辑配置相关参数后再运行部署脚本"
+        error "特别是以下参数必须修改："
+        error "  - DB_PASSWORD: 数据库密码"
+        error "  - JWT_SECRET: JWT 密钥（生产环境）"
+        error "  - ADMIN_RESET_PASSWORD_KEY: 管理员密码重置密钥（生产环境）"
+        exit 1
     fi
     
     # 构建并启动

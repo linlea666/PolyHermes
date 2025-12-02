@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: polymarket-bot
+    ports:
+      - "${SERVER_PORT:-80}:80"
+    environment:
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+      - DB_URL=${DB_URL:-jdbc:mysql://mysql:3306/polymarket_bot?useSSL=false&serverTimezone=UTC&characterEncoding=utf8mb4}
+      - DB_USERNAME=${DB_USERNAME:-root}
+      - DB_PASSWORD=${DB_PASSWORD:-}
+      - SERVER_PORT=8000
+      - POLYGON_RPC_URL=${POLYGON_RPC_URL:-https://polygon-rpc.com}
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - ADMIN_RESET_PASSWORD_KEY=${ADMIN_RESET_PASSWORD_KEY:-change-me-in-production}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - polymarket-network
+
+  mysql:
+    image: mysql:8.2
+    container_name: polymarket-bot-mysql
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD:-rootpassword}
+      - MYSQL_DATABASE=polymarket_bot
+      - MYSQL_CHARACTER_SET_SERVER=utf8mb4
+      - MYSQL_COLLATION_SERVER=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - polymarket-network
+
+volumes:
+  mysql-data:
+
+networks:
+  polymarket-network:
+    driver: bridge
+

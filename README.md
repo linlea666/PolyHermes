@@ -124,25 +124,33 @@ npm run dev
 
 #### 快速部署
 
-**后端（Java 方式）**:
+**一体化部署（推荐）** - 前后端一起部署到一个容器：
+```bash
+# 在项目根目录
+./deploy.sh
+```
+
+**分别部署**:
+
+后端（Java 方式）:
 ```bash
 cd backend
 ./deploy.sh java
 ```
 
-**后端（Docker 方式）**:
+后端（Docker 方式）:
 ```bash
 cd backend
 ./deploy.sh docker
 ```
 
-**前端**:
+前端:
 ```bash
 cd frontend
-# 使用默认后端地址
+# 使用默认后端地址（相对路径）
 ./build.sh
 
-# 或指定自定义后端地址
+# 或指定自定义后端地址（跨域场景）
 ./build.sh --api-url http://your-backend-server.com:8000
 ```
 

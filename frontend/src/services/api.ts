@@ -5,17 +5,16 @@ import { wsManager } from './websocket'
 
 /**
  * API 基础配置
- * 支持通过环境变量 VITE_API_URL 配置后端地址
- * 默认使用相对路径 /api（适用于同域部署）
- * 如果设置了 VITE_API_URL，则使用完整 URL
+ * 默认使用相对路径 /api（通过反向代理转发）
+ * 如果设置了 VITE_API_URL 环境变量，则使用完整 URL（用于跨域场景）
  */
 const getBaseURL = (): string => {
   const envApiUrl = import.meta.env.VITE_API_URL
   if (envApiUrl) {
-    // 如果设置了环境变量，使用完整 URL
+    // 如果设置了环境变量，使用完整 URL（支持跨域）
     return `${envApiUrl}/api`
   }
-  // 否则使用相对路径（适用于开发环境代理或同域部署）
+  // 否则使用相对路径（通过反向代理转发）
   return '/api'
 }
 

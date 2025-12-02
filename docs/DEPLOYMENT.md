@@ -4,12 +4,89 @@
 
 ## 目录
 
+- [一体化部署（推荐）](#一体化部署推荐)
 - [后端部署](#后端部署)
   - [Java 直接部署](#java-直接部署)
   - [Docker 部署](#docker-部署)
 - [前端部署](#前端部署)
 - [环境配置](#环境配置)
 - [常见问题](#常见问题)
+
+## 一体化部署（推荐）
+
+将前后端一起部署到一个 Docker 容器中，使用 Nginx 提供前端静态文件并代理后端 API。
+
+### 前置要求
+
+- Docker 20.10+
+- Docker Compose 2.0+
+
+### 部署步骤
+
+1. **使用部署脚本（推荐）**
+
+```bash
+# 在项目根目录
+./deploy.sh
+```
+
+脚本会自动：
+- 检查 Docker 环境
+- 创建 `.env` 配置文件（如果不存在）
+- 构建 Docker 镜像（包含前后端）
+- 启动服务（应用 + MySQL）
+
+2. **手动部署**
+
+```bash
+# 创建 .env 文件
+cat > .env <<EOF
+DB_URL=jdbc:mysql://mysql:3306/polymarket_bot?useSSL=false&serverTimezone=UTC&characterEncoding=utf8mb4
+DB_USERNAME=root
+DB_PASSWORD=your_password_here
+SPRING_PROFILES_ACTIVE=prod
+SERVER_PORT=80
+POLYGON_RPC_URL=https://polygon-rpc.com
+JWT_SECRET=your-jwt-secret-key-change-in-production
+ADMIN_RESET_PASSWORD_KEY=your-admin-reset-key-change-in-production
+EOF
+
+# 构建并启动
+docker-compose build
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
+```
+
+3. **访问应用**
+
+- 前端和后端统一访问：`http://localhost:80`
+- Nginx 自动处理：
+  - `/api/*` → 后端 API（`localhost:8000`）
+  - `/ws` → 后端 WebSocket（`localhost:8000`）
+  - 其他路径 → 前端静态文件
+
+### 架构说明
+
+```
+用户请求
+  ↓
+Nginx (端口 80)
+  ├─ /api/* → 后端服务 (localhost:8000)
+  ├─ /ws → 后端 WebSocket (localhost:8000)
+  └─ /* → 前端静态文件 (/usr/share/nginx/html)
+```
+
+### 优势
+
+- ✅ 单一容器，简化部署
+- ✅ 统一端口，无需配置 CORS
+- ✅ 自动处理前后端路由
+- ✅ 生产环境就绪
 
 ## 后端部署
 
