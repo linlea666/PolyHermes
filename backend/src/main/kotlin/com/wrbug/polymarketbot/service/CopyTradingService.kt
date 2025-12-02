@@ -162,16 +162,12 @@ class CopyTradingService(
             
             val saved = copyTradingRepository.save(updated)
             
-            // 更新监听状态
+            // 重新启动监听（确保状态完全同步）
             kotlinx.coroutines.runBlocking {
                 try {
-                    if (saved.enabled) {
-                        monitorService.addLeaderMonitoring(saved.leaderId)
-                    } else {
-                        monitorService.removeLeaderMonitoring(saved.leaderId)
-                    }
+                    monitorService.restartMonitoring()
                 } catch (e: Exception) {
-                    logger.error("更新Leader监听状态失败: leaderId=${saved.leaderId}", e)
+                    logger.error("重新启动跟单监听失败", e)
                 }
             }
             
