@@ -53,16 +53,16 @@ COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
-# 创建 Nginx 运行目录
-RUN mkdir -p /var/log/nginx /var/lib/nginx /var/cache/nginx && \
-    chown -R appuser:appuser /var/log/nginx /var/lib/nginx /var/cache/nginx
+# 创建非 root 用户（必须先创建用户，然后才能使用 chown）
+RUN useradd -m -u 1000 appuser
 
-# 创建非 root 用户
-RUN useradd -m -u 1000 appuser && \
+# 创建 Nginx 运行目录并设置权限
+RUN mkdir -p /var/log/nginx /var/lib/nginx /var/cache/nginx && \
     chown -R appuser:appuser /app && \
     chown -R appuser:appuser /usr/share/nginx/html && \
     chown -R appuser:appuser /var/log/nginx && \
     chown -R appuser:appuser /var/lib/nginx && \
+    chown -R appuser:appuser /var/cache/nginx && \
     chown -R appuser:appuser /etc/nginx
 
 USER appuser
