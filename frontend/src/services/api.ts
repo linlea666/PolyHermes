@@ -44,6 +44,23 @@ apiClient.interceptors.request.use(
 )
 
 /**
+ * 处理认证错误（自动登出）
+ */
+const handleAuthError = (code: number) => {
+  // 检查是否是认证错误（2001-2999）
+  if (code >= 2001 && code < 3000) {
+    // 清除 token
+    removeToken()
+    // 断开 WebSocket 连接
+    wsManager.disconnect()
+    // 跳转到登录页（避免循环跳转）
+    if (window.location.pathname !== '/login' && window.location.pathname !== '/reset-password') {
+      window.location.href = '/login'
+    }
+  }
+}
+
+/**
  * 响应拦截器
  */
 apiClient.interceptors.response.use(
@@ -53,6 +70,14 @@ apiClient.interceptors.response.use(
     if (newToken) {
       setToken(newToken)
     }
+    
+    // 检查响应体中的 code，如果是认证错误，自动登出
+    // 后端可能返回 200 状态码，但 code 是 2001（认证失败）
+    const data = response.data as ApiResponse<any>
+    if (data && data.code !== undefined) {
+      handleAuthError(data.code)
+    }
+    
     return response
   },
   (error: AxiosError<ApiResponse<any>>) => {
@@ -61,15 +86,8 @@ apiClient.interceptors.response.use(
       const data = response.data
       
       // 检查是否是认证错误（2001-2999）
-      if (data && data.code >= 2001 && data.code < 3000) {
-        // 清除 token
-        removeToken()
-        // 断开 WebSocket 连接
-        wsManager.disconnect()
-        // 跳转到登录页（避免循环跳转）
-        if (window.location.pathname !== '/login' && window.location.pathname !== '/reset-password') {
-          window.location.href = '/login'
-        }
+      if (data && data.code !== undefined) {
+        handleAuthError(data.code)
       }
       
       console.error('API 错误:', data)

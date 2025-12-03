@@ -43,8 +43,8 @@ class AuthService(
                 return Result.failure(IllegalArgumentException(ErrorCode.AUTH_USERNAME_OR_PASSWORD_ERROR.message))
             }
             
-            // 生成JWT token
-            val token = jwtUtils.generateToken(username)
+            // 生成JWT token（包含tokenVersion，用于使修改密码后的旧token失效）
+            val token = jwtUtils.generateToken(username, user.tokenVersion)
             
             logger.info("用户登录成功：username=$username")
             Result.success(LoginResponse(token = token))
@@ -90,14 +90,15 @@ class AuthService(
             val existingUser = userRepository.findByUsername(username)
             
             if (existingUser != null) {
-                // 用户存在，更新密码
+                // 用户存在，更新密码并递增tokenVersion（使所有旧token失效）
                 val encodedPassword = passwordEncoder.encode(newPassword)
                 val updatedUser = existingUser.copy(
                     password = encodedPassword,
+                    tokenVersion = existingUser.tokenVersion + 1,  // 递增tokenVersion
                     updatedAt = System.currentTimeMillis()
                 )
                 userRepository.save(updatedUser)
-                logger.info("密码重置成功：username=$username")
+                logger.info("密码重置成功：username=$username, tokenVersion=${updatedUser.tokenVersion}")
             } else {
                 // 用户不存在，检查是否是首次使用
                 val isFirstUse = userRepository.count() == 0L
@@ -108,6 +109,7 @@ class AuthService(
                         username = username,
                         password = encodedPassword,
                         isDefault = true,  // 首次创建的用户为默认账户
+                        tokenVersion = 0,  // 初始tokenVersion为0
                         createdAt = System.currentTimeMillis(),
                         updatedAt = System.currentTimeMillis()
                     )
@@ -145,7 +147,11 @@ class AuthService(
             val username = jwtUtils.getUsernameFromToken(token)
                 ?: return Result.failure(IllegalArgumentException(ErrorCode.AUTH_TOKEN_INVALID.message))
             
-            val newToken = jwtUtils.generateToken(username)
+            // 从数据库获取用户的tokenVersion
+            val user = userRepository.findByUsername(username)
+                ?: return Result.failure(IllegalArgumentException(ErrorCode.AUTH_TOKEN_INVALID.message))
+            
+            val newToken = jwtUtils.generateToken(username, user.tokenVersion)
             logger.debug("Token刷新成功：username=$username")
             Result.success(newToken)
         } catch (e: Exception) {

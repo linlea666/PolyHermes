@@ -86,7 +86,10 @@ class OrderSigningService {
             // makerAmount 是 USDC 金额，最多 2 位小数
             // takerAmount 是 shares 数量，最多 4 位小数
             val rawTakerAmt = roundDown(sizeDecimal, roundConfig.size)
-            var rawMakerAmt = rawTakerAmt.multiply(roundedPrice)
+            
+            // makerAmount = price * size，使用原始价格计算（与SDK保持一致）
+            // 先使用原始价格计算，然后再进行舍入，确保精度一致
+            var rawMakerAmt = rawTakerAmt.multiply(priceDecimal)
             
             // 确保 makerAmount 精度（USDC，最多 2 位小数）
             rawMakerAmt = roundDown(rawMakerAmt, MAKER_AMOUNT_DECIMALS)
@@ -102,18 +105,20 @@ class OrderSigningService {
         } else {
             // SELL: makerAmount = size (shares), takerAmount = price * size (USDC)
             // makerAmount 是 shares 数量，最多 4 位小数
-            // takerAmount 是 USDC 金额，需要精确计算，不进行舍入（保留足够精度以转换为 wei）
+            // takerAmount 是 USDC 金额，需要使用原始价格计算（与SDK保持一致）
             val rawMakerAmt = roundDown(sizeDecimal, roundConfig.size)
-            // takerAmount = price * size，使用精确计算，不进行舍入
-            // 直接使用精确计算结果转换为 wei（6 位小数），让 parseUnits 处理精度
-            val rawTakerAmt = rawMakerAmt.multiply(roundedPrice)
+            
+            // takerAmount = price * size，使用原始价格计算（不使用舍入后的价格）
+            // SDK期望使用原始价格进行计算，以保留足够的精度
+            // 例如：0.9596 * 16.09 = 15.439964，而不是 0.96 * 16.09 = 15.4464
+            val rawTakerAmt = rawMakerAmt.multiply(priceDecimal)
             
             // 确保 makerAmount 精度（shares，最多 4 位小数）
             val finalMakerAmt = roundDown(rawMakerAmt, TAKER_AMOUNT_DECIMALS)
             
             // takerAmount 不进行舍入，直接使用精确计算结果转换为 wei
-            // 这样可以保留足够的精度，避免精度丢失导致的错误
             // parseUnits 会将 BigDecimal 转换为 wei（6 位小数），自动处理精度
+            // 使用原始价格计算可以确保与SDK的结果一致
             
             // 转换为 wei（6 位小数）
             val makerAmount = parseUnits(finalMakerAmt, COLLATERAL_TOKEN_DECIMALS)

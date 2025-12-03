@@ -153,15 +153,16 @@ class UserService(
                 return Result.failure(IllegalArgumentException("不能修改默认账户的密码"))
             }
             
-            // 更新密码
+            // 更新密码并递增tokenVersion（使所有旧token失效）
             val encodedPassword = passwordEncoder.encode(request.newPassword)
             val updatedUser = targetUser.copy(
                 password = encodedPassword,
+                tokenVersion = targetUser.tokenVersion + 1,  // 递增tokenVersion
                 updatedAt = System.currentTimeMillis()
             )
             userRepository.save(updatedUser)
             
-            logger.info("更新用户密码成功：userId=${request.userId}, username=${targetUser.username}, updatedBy=$currentUsername")
+            logger.info("更新用户密码成功：userId=${request.userId}, username=${targetUser.username}, updatedBy=$currentUsername, tokenVersion=${updatedUser.tokenVersion}")
             Result.success(Unit)
         } catch (e: Exception) {
             logger.error("更新用户密码异常：userId=${request.userId}, currentUser=$currentUsername", e)
@@ -185,15 +186,16 @@ class UserService(
             val user = userRepository.findByUsername(currentUsername)
                 ?: return Result.failure(IllegalArgumentException("用户不存在"))
             
-            // 更新密码（只更新当前用户的密码，不依赖任何请求参数中的用户ID）
+            // 更新密码并递增tokenVersion（使所有旧token失效）
             val encodedPassword = passwordEncoder.encode(newPassword)
             val updatedUser = user.copy(
                 password = encodedPassword,
+                tokenVersion = user.tokenVersion + 1,  // 递增tokenVersion
                 updatedAt = System.currentTimeMillis()
             )
             userRepository.save(updatedUser)
             
-            logger.info("用户修改自己密码成功：username=$currentUsername, userId=${user.id}")
+            logger.info("用户修改自己密码成功：username=$currentUsername, userId=${user.id}, tokenVersion=${updatedUser.tokenVersion}")
             Result.success(Unit)
         } catch (e: Exception) {
             logger.error("用户修改自己密码异常：username=$currentUsername", e)

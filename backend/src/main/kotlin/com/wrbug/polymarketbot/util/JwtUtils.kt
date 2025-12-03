@@ -63,14 +63,16 @@ class JwtUtils {
     /**
      * 生成JWT token
      * @param username 用户名
+     * @param tokenVersion Token版本号（用于使修改密码后的旧token失效）
      * @return JWT token字符串
      */
-    fun generateToken(username: String): String {
+    fun generateToken(username: String, tokenVersion: Long = 0): String {
         val now = Date()
         val expiryDate = Date(now.time + expiration)
         
         return Jwts.builder()
             .subject(username)
+            .claim("tokenVersion", tokenVersion)  // 添加tokenVersion到payload
             .issuedAt(now)
             .expiration(expiryDate)
             .signWith(getSigningKey())
@@ -111,6 +113,23 @@ class JwtUtils {
         return try {
             val claims = getClaimsFromToken(token)
             claims?.subject
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    /**
+     * 从token中获取tokenVersion
+     */
+    fun getTokenVersionFromToken(token: String): Long? {
+        return try {
+            val claims = getClaimsFromToken(token)
+            val version = claims?.get("tokenVersion")
+            when (version) {
+                is Number -> version.toLong()
+                is String -> version.toLongOrNull()
+                else -> null
+            }
         } catch (e: Exception) {
             null
         }

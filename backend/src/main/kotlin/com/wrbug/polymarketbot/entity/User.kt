@@ -21,6 +21,9 @@ data class User(
     @Column(name = "is_default", nullable = false)
     val isDefault: Boolean = false,  // 是否默认账户（首次创建的用户）
     
+    @Column(name = "token_version", nullable = false)
+    var tokenVersion: Long = 0,  // Token版本号，修改密码时递增，用于使所有JWT失效
+    
     @Column(name = "created_at", nullable = false)
     val createdAt: Long = System.currentTimeMillis(),
     

@@ -1,6 +1,7 @@
 package com.wrbug.polymarketbot.config
 
 import com.wrbug.polymarketbot.dto.ApiResponse
+import com.wrbug.polymarketbot.repository.UserRepository
 import com.wrbug.polymarketbot.util.JwtUtils
 import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.servlet.http.HttpServletRequest
@@ -15,7 +16,8 @@ import org.springframework.web.servlet.HandlerInterceptor
  */
 @Component
 class JwtAuthenticationInterceptor(
-    private val jwtUtils: JwtUtils
+    private val jwtUtils: JwtUtils,
+    private val userRepository: UserRepository
 ) : HandlerInterceptor {
     
     private val logger = LoggerFactory.getLogger(JwtAuthenticationInterceptor::class.java)
@@ -67,19 +69,34 @@ class JwtAuthenticationInterceptor(
             return false
         }
         
+        // 验证tokenVersion（检查token是否因密码修改而失效）
+        val username = jwtUtils.getUsernameFromToken(token)
+        if (username != null) {
+            val user = userRepository.findByUsername(username)
+            if (user != null) {
+                val tokenVersion = jwtUtils.getTokenVersionFromToken(token)
+                if (tokenVersion == null || tokenVersion != user.tokenVersion) {
+                    logger.warn("Token版本不匹配，token已失效: username=$username, tokenVersion=$tokenVersion, userTokenVersion=${user.tokenVersion}, path=$path")
+                    sendAuthError(response, "认证令牌已失效，请重新登录")
+                    return false
+                }
+            }
+        }
+        
         // 检查是否需要刷新token（使用超过1天但未过期）
         if (jwtUtils.isTokenExpiring(token)) {
-            val username = jwtUtils.getUsernameFromToken(token)
             if (username != null) {
-                val newToken = jwtUtils.generateToken(username)
-                // 在响应头中返回新token
-                response.setHeader("X-New-Token", newToken)
-                logger.debug("Token自动刷新: username=$username, path=$path")
+                val user = userRepository.findByUsername(username)
+                if (user != null) {
+                    val newToken = jwtUtils.generateToken(username, user.tokenVersion)
+                    // 在响应头中返回新token
+                    response.setHeader("X-New-Token", newToken)
+                    logger.debug("Token自动刷新: username=$username, path=$path")
+                }
             }
         }
         
         // 将用户名存入Request属性，供后续使用
-        val username = jwtUtils.getUsernameFromToken(token)
         if (username != null) {
             request.setAttribute("username", username)
         }
