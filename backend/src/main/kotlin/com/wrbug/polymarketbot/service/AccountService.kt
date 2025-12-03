@@ -30,7 +30,7 @@ class AccountService(
 ) {
 
     private val logger = LoggerFactory.getLogger(AccountService::class.java)
-    
+
     // 市价单价格调整系数（在最优价基础上调整，确保更快成交）
     // 市价买单：bestAsk + BUY_PRICE_ADJUSTMENT（加价，确保能立即成交）
     // 市价卖单：bestBid - SELL_PRICE_ADJUSTMENT（减价，确保能立即成交）
@@ -109,17 +109,19 @@ class AccountService(
                 }
             }
 
-            // 7. 加密私钥
+            // 7. 加密敏感信息
             val encryptedPrivateKey = cryptoUtils.encrypt(request.privateKey)
-            
+            val encryptedApiSecret = apiKeyCreds.secret?.let { cryptoUtils.encrypt(it) }
+            val encryptedApiPassphrase = apiKeyCreds.passphrase?.let { cryptoUtils.encrypt(it) }
+
             // 8. 创建账户
             val account = Account(
                 privateKey = encryptedPrivateKey,  // 存储加密后的私钥
                 walletAddress = request.walletAddress,
                 proxyAddress = proxyAddress,
                 apiKey = apiKeyCreds.apiKey,
-                apiSecret = apiKeyCreds.secret,
-                apiPassphrase = apiKeyCreds.passphrase,
+                apiSecret = encryptedApiSecret,  // 存储加密后的 API Secret
+                apiPassphrase = encryptedApiPassphrase,  // 存储加密后的 API Passphrase
                 accountName = request.accountName,
                 isDefault = request.isDefault,
                 isEnabled = request.isEnabled,
@@ -420,10 +422,10 @@ class AccountService(
                 )
             }
 
-            // 使用 API 凭证（直接使用，无需解密）
+            // 解密 API 凭证
             val apiKey = account.apiKey
-            val apiSecret = account.apiSecret
-            val apiPassphrase = account.apiPassphrase
+            val apiSecret = decryptApiSecret(account)
+            val apiPassphrase = decryptApiPassphrase(account)
 
             // 创建带认证的 API 客户端（需要钱包地址用于 POLY_ADDRESS 请求头）
             val clobApi = retrofitFactory.createClobApi(apiKey, apiSecret, apiPassphrase, account.walletAddress)
@@ -573,25 +575,45 @@ class AccountService(
         val cleanKey = if (privateKey.startsWith("0x")) privateKey.substring(2) else privateKey
         return cleanKey.length == 64 && cleanKey.matches(Regex("^[0-9a-fA-F]{64}$"))
     }
-    
+
     /**
      * 解密账户私钥
-     * 支持向后兼容：如果私钥未加密（明文），直接返回
      */
     fun decryptPrivateKey(account: Account): String {
         return try {
-            // 尝试解密（如果已加密）
-            if (cryptoUtils.isEncrypted(account.privateKey)) {
-                cryptoUtils.decrypt(account.privateKey)
-            } else {
-                // 向后兼容：如果私钥未加密（可能是旧数据），直接返回
-                logger.warn("账户 ${account.id} 的私钥未加密，建议重新导入账户以加密私钥")
-                account.privateKey
-            }
+            cryptoUtils.decrypt(account.privateKey)
         } catch (e: Exception) {
             logger.error("解密私钥失败: accountId=${account.id}", e)
             throw RuntimeException("解密私钥失败: ${e.message}", e)
         }
+    }
+    
+    /**
+     * 解密账户 API Secret
+     */
+    private fun decryptApiSecret(account: Account): String {
+        return account.apiSecret?.let { secret ->
+            try {
+                cryptoUtils.decrypt(secret)
+            } catch (e: Exception) {
+                logger.error("解密 API Secret 失败: accountId=${account.id}", e)
+                throw RuntimeException("解密 API Secret 失败: ${e.message}", e)
+            }
+        } ?: throw IllegalStateException("账户未配置 API Secret")
+    }
+    
+    /**
+     * 解密账户 API Passphrase
+     */
+    private fun decryptApiPassphrase(account: Account): String {
+        return account.apiPassphrase?.let { passphrase ->
+            try {
+                cryptoUtils.decrypt(passphrase)
+            } catch (e: Exception) {
+                logger.error("解密 API Passphrase 失败: accountId=${account.id}", e)
+                throw RuntimeException("解密 API Passphrase 失败: ${e.message}", e)
+            }
+        } ?: throw IllegalStateException("账户未配置 API Passphrase")
     }
 
     /**
@@ -683,32 +705,32 @@ class AccountService(
             // 1. 验证账户是否存在且已配置API凭证
             val account = accountRepository.findById(request.accountId).orElse(null)
                 ?: return Result.failure(IllegalArgumentException("账户不存在"))
-            
+
             if (account.apiKey == null || account.apiSecret == null || account.apiPassphrase == null) {
                 return Result.failure(IllegalStateException("账户未配置API凭证，无法创建订单"))
             }
-            
+
             // 2. 验证仓位是否存在且数量足够
             val positionsResult = getAllPositions()
             positionsResult.fold(
                 onSuccess = { positionListResponse ->
-                    val position = positionListResponse.currentPositions.find { 
-                        it.accountId == request.accountId && 
-                        it.marketId == request.marketId && 
-                        it.side == request.side 
+                    val position = positionListResponse.currentPositions.find {
+                        it.accountId == request.accountId &&
+                                it.marketId == request.marketId &&
+                                it.side == request.side
                     }
-                    
+
                     if (position == null) {
                         return Result.failure(IllegalArgumentException("仓位不存在"))
                     }
-                    
+
                     val positionQuantity = position.quantity.toSafeBigDecimal()
                     val sellQuantity = request.quantity.toSafeBigDecimal()
-                    
+
                     if (sellQuantity <= BigDecimal.ZERO) {
                         return Result.failure(IllegalArgumentException("卖出数量必须大于0"))
                     }
-                    
+
                     if (sellQuantity > positionQuantity) {
                         return Result.failure(IllegalArgumentException("卖出数量不能超过持仓数量"))
                     }
@@ -717,7 +739,7 @@ class AccountService(
                     return Result.failure(Exception("查询仓位失败: ${e.message}"))
                 }
             )
-            
+
             // 3. 获取 tokenId（从 conditionId 和 outcomeIndex 计算）
             // 需要先获取 tokenId，以便后续通过 CLOB API 获取三元及以上市场的价格
             // 优先使用 outcomeIndex，如果没有则尝试从 side 推断（仅支持 YES/NO）
@@ -735,16 +757,16 @@ class AccountService(
                 }
             }
             val tokenId = tokenIdResult.getOrNull()
-            
+
             if (tokenId == null) {
                 logger.warn("无法获取 tokenId，将使用 market 参数: conditionId=${request.marketId}, side=${request.side}, outcomeIndex=${request.outcomeIndex}, error=${tokenIdResult.exceptionOrNull()?.message}")
             }
-            
+
             // 4. 验证 tokenId
             if (tokenId == null) {
                 return Result.failure(IllegalStateException("无法获取 tokenId，无法创建订单。请确保已配置 Ethereum RPC URL 或提供 outcomeIndex 参数"))
             }
-            
+
             // 5. 确定卖出价格
             // 市价单：从订单表获取最优价（通过 tokenId 获取对应 outcome 的订单表）
             // - 市价卖单：从订单表获取 bestBid（最高买入价），然后减去 SELL_PRICE_ADJUSTMENT
@@ -765,13 +787,13 @@ class AccountService(
                 // 限价订单：使用用户输入的价格
                 request.price ?: return Result.failure(IllegalArgumentException("限价订单必须提供价格"))
             }
-            
+
             // 6. 验证价格
             val priceDecimal = sellPrice.toSafeBigDecimal()
             if (priceDecimal <= BigDecimal.ZERO) {
                 return Result.failure(IllegalArgumentException("价格必须大于0"))
             }
-            
+
             // 7. 确定订单类型和过期时间
             // 根据官方文档：
             // - GTC (Good-Til-Cancelled): expiration 必须为 "0"
@@ -783,14 +805,14 @@ class AccountService(
                 "LIMIT" -> "GTC"   // Good-Til-Cancelled
                 else -> "GTC"
             }
-            
+
             // GTC 和 FOK 订单的 expiration 必须为 "0"
             // 只有 GTD 订单才需要设置具体的过期时间
             val expiration = "0"
-            
+
             // 7. 解密私钥
             val decryptedPrivateKey = decryptPrivateKey(account)
-            
+
             // 8. 创建并签名订单
             val signedOrder = try {
                 orderSigningService.createAndSignOrder(
@@ -809,27 +831,40 @@ class AccountService(
                 logger.error("创建并签名订单失败", e)
                 return Result.failure(Exception("创建并签名订单失败: ${e.message}"))
             }
-            
+
             // 8. 构建订单请求
-            
+
             val newOrderRequest = com.wrbug.polymarketbot.api.NewOrderRequest(
                 order = signedOrder,
                 owner = account.apiKey!!,  // API Key
                 orderType = orderType,
                 deferExec = false
             )
-            
-            // 9. 使用账户的API凭证创建订单
+
+            // 9. 解密 API 凭证并使用账户的API凭证创建订单
+            val apiSecret = try {
+                decryptApiSecret(account)
+            } catch (e: Exception) {
+                logger.error("解密 API 凭证失败: accountId=${account.id}", e)
+                return Result.failure(IllegalStateException("解密 API 凭证失败: ${e.message}"))
+            }
+            val apiPassphrase = try {
+                decryptApiPassphrase(account)
+            } catch (e: Exception) {
+                logger.error("解密 API 凭证失败: accountId=${account.id}", e)
+                return Result.failure(IllegalStateException("解密 API 凭证失败: ${e.message}"))
+            }
+
             val clobApi = retrofitFactory.createClobApi(
                 account.apiKey!!,
-                account.apiSecret!!,
-                account.apiPassphrase!!,
+                apiSecret,
+                apiPassphrase,
                 account.walletAddress
             )
-            
-            
+
+
             val orderResponse = clobApi.createOrder(newOrderRequest)
-            
+
             if (orderResponse.isSuccessful && orderResponse.body() != null) {
                 val response = orderResponse.body()!!
                 if (response.success) {
@@ -864,12 +899,12 @@ class AccountService(
             Result.failure(e)
         }
     }
-    
+
     /**
      * 从订单表获取最优价（用于市价单）
      * 支持多元市场（二元、三元及以上）
      * 委托给 PolymarketClobService.getOptimalPrice 方法
-     * 
+     *
      * @param tokenId token ID（通过 marketId 和 outcomeIndex 计算得出）
      * @param isSellOrder 是否为卖出订单（true: 卖单，需要 bestBid；false: 买单，需要 bestAsk）
      * @return 最优价格（已应用调整系数）
@@ -883,7 +918,7 @@ class AccountService(
             sellPriceAdjustment = SELL_PRICE_ADJUSTMENT
         )
     }
-    
+
     /**
      * 获取市场价格
      * 使用 Gamma API 获取价格信息，因为 Gamma API 支持 condition_ids 参数
@@ -893,17 +928,17 @@ class AccountService(
             // 使用 Gamma API 获取市场信息（支持 condition_ids 参数）
             val gammaApi = retrofitFactory.createGammaApi()
             val response = gammaApi.listMarkets(conditionIds = listOf(marketId))
-            
+
             if (response.isSuccessful && response.body() != null) {
                 val markets = response.body()!!
                 val market = markets.firstOrNull()
-                
+
                 if (market != null) {
                     // 从 Gamma API 响应中提取价格信息
                     val bestBid = market.bestBid?.toString()
                     val bestAsk = market.bestAsk?.toString()
                     val lastPrice = market.lastTradePrice?.toString()
-                    
+
                     // 计算中间价 = (bestBid + bestAsk) / 2
                     val midpoint = if (bestBid != null && bestAsk != null) {
                         val bid = bestBid.toSafeBigDecimal()
@@ -912,7 +947,7 @@ class AccountService(
                     } else {
                         null
                     }
-                    
+
                     Result.success(
                         MarketPriceResponse(
                             marketId = marketId,
@@ -933,7 +968,7 @@ class AccountService(
             Result.failure(e)
         }
     }
-    
+
     /**
      * 获取可赎回仓位统计
      */
@@ -944,19 +979,19 @@ class AccountService(
                 onSuccess = { positionListResponse ->
                     // 筛选可赎回的仓位
                     val redeemablePositions = positionListResponse.currentPositions.filter { it.redeemable }
-                    
+
                     // 如果指定了账户ID，进一步筛选
                     val filteredPositions = if (accountId != null) {
                         redeemablePositions.filter { it.accountId == accountId }
                     } else {
                         redeemablePositions
                     }
-                    
+
                     // 计算总价值（赎回是1:1，所以价值等于数量）
                     val totalValue = filteredPositions.fold(BigDecimal.ZERO) { sum, pos ->
                         sum.add(pos.quantity.toSafeBigDecimal())
                     }
-                    
+
                     // 转换为可赎回仓位信息列表
                     val redeemableInfoList = filteredPositions.map { pos ->
                         com.wrbug.polymarketbot.dto.RedeemablePositionInfo(
@@ -970,7 +1005,7 @@ class AccountService(
                             value = pos.quantity  // 赎回价值等于数量（1:1）
                         )
                     }
-                    
+
                     Result.success(
                         com.wrbug.polymarketbot.dto.RedeemablePositionsSummary(
                             totalCount = redeemableInfoList.size,
@@ -988,7 +1023,7 @@ class AccountService(
             Result.failure(e)
         }
     }
-    
+
     /**
      * 赎回仓位
      * 支持多账户、多仓位赎回（自动按账户和市场分组）
@@ -998,16 +1033,16 @@ class AccountService(
             if (request.positions.isEmpty()) {
                 return Result.failure(IllegalArgumentException("赎回仓位列表不能为空"))
             }
-            
+
             // 1. 验证仓位是否存在且可赎回
             val positionsResult = getAllPositions()
             val allPositions = positionsResult.getOrElse {
                 return Result.failure(Exception("查询仓位失败: ${it.message}"))
             }
-            
+
             // 2. 按账户分组
             val positionsByAccount = request.positions.groupBy { it.accountId }
-            
+
             // 3. 验证所有账户是否存在
             val accounts = mutableMapOf<Long, Account>()
             for (accountId in positionsByAccount.keys) {
@@ -1015,34 +1050,35 @@ class AccountService(
                     ?: return Result.failure(IllegalArgumentException("账户不存在: $accountId"))
                 accounts[accountId] = account
             }
-            
+
             // 4. 验证并收集要赎回的仓位信息（按账户分组）
             val accountRedeemData = mutableMapOf<Long, MutableList<Pair<AccountPositionDto, BigInteger>>>()
-            val accountRedeemedInfo = mutableMapOf<Long, MutableList<com.wrbug.polymarketbot.dto.RedeemedPositionInfo>>()
-            
+            val accountRedeemedInfo =
+                mutableMapOf<Long, MutableList<com.wrbug.polymarketbot.dto.RedeemedPositionInfo>>()
+
             for ((accountId, requestItems) in positionsByAccount) {
                 val accountPositions = mutableListOf<Pair<AccountPositionDto, BigInteger>>()
                 val accountInfo = mutableListOf<com.wrbug.polymarketbot.dto.RedeemedPositionInfo>()
-                
+
                 for (requestItem in requestItems) {
                     val position = allPositions.currentPositions.find {
                         it.accountId == accountId &&
-                        it.marketId == requestItem.marketId &&
-                        it.outcomeIndex == requestItem.outcomeIndex
+                                it.marketId == requestItem.marketId &&
+                                it.outcomeIndex == requestItem.outcomeIndex
                     }
-                    
+
                     if (position == null) {
                         return Result.failure(IllegalArgumentException("仓位不存在: accountId=$accountId, marketId=${requestItem.marketId}, outcomeIndex=${requestItem.outcomeIndex}"))
                     }
-                    
+
                     if (!position.redeemable) {
                         return Result.failure(IllegalStateException("仓位不可赎回: accountId=$accountId, marketId=${requestItem.marketId}, outcomeIndex=${requestItem.outcomeIndex}"))
                     }
-                    
+
                     // 计算 indexSet = 2^outcomeIndex
                     val indexSet = BigInteger.TWO.pow(requestItem.outcomeIndex)
                     accountPositions.add(Pair(position, indexSet))
-                    
+
                     accountInfo.add(
                         com.wrbug.polymarketbot.dto.RedeemedPositionInfo(
                             marketId = position.marketId,
@@ -1053,30 +1089,30 @@ class AccountService(
                         )
                     )
                 }
-                
+
                 accountRedeemData[accountId] = accountPositions
                 accountRedeemedInfo[accountId] = accountInfo
             }
-            
+
             // 5. 对每个账户执行赎回
             val accountTransactions = mutableListOf<com.wrbug.polymarketbot.dto.AccountRedeemTransaction>()
             var totalRedeemedValue = BigDecimal.ZERO
-            
+
             for ((accountId, positions) in accountRedeemData) {
                 val account = accounts[accountId]!!
                 val redeemedInfo = accountRedeemedInfo[accountId]!!
-                
+
                 // 按市场分组（同一市场的仓位可以批量赎回）
                 val positionsByMarket = positions.groupBy { it.first.marketId }
-                
+
                 // 对每个市场执行赎回
                 var lastTxHash: String? = null
                 for ((marketId, marketPositions) in positionsByMarket) {
                     val indexSets = marketPositions.map { it.second }
-                    
+
                     // 解密私钥
                     val decryptedPrivateKey = decryptPrivateKey(account)
-                    
+
                     // 调用区块链服务赎回仓位
                     val redeemResult = blockchainService.redeemPositions(
                         privateKey = decryptedPrivateKey,
@@ -1084,7 +1120,7 @@ class AccountService(
                         conditionId = marketId,
                         indexSets = indexSets
                     )
-                    
+
                     redeemResult.fold(
                         onSuccess = { txHash ->
                             lastTxHash = txHash
@@ -1095,13 +1131,13 @@ class AccountService(
                         }
                     )
                 }
-                
+
                 // 计算该账户的赎回总价值
                 val accountTotalValue = redeemedInfo.fold(BigDecimal.ZERO) { sum, info ->
                     sum.add(info.value.toSafeBigDecimal())
                 }
                 totalRedeemedValue = totalRedeemedValue.add(accountTotalValue)
-                
+
                 // 添加到交易列表
                 accountTransactions.add(
                     com.wrbug.polymarketbot.dto.AccountRedeemTransaction(
@@ -1112,7 +1148,7 @@ class AccountService(
                     )
                 )
             }
-            
+
             // 6. 返回结果
             Result.success(
                 com.wrbug.polymarketbot.dto.PositionRedeemResponse(
@@ -1126,7 +1162,7 @@ class AccountService(
             Result.failure(e)
         }
     }
-    
+
     /**
      * 检查账户是否有活跃订单
      * 使用账户的 API Key 查询该账户的活跃订单
@@ -1138,10 +1174,10 @@ class AccountService(
                 return false
             }
 
-            // 使用 API 凭证（直接使用，无需解密）
+            // 解密 API 凭证
             val apiKey = account.apiKey
-            val apiSecret = account.apiSecret
-            val apiPassphrase = account.apiPassphrase
+            val apiSecret = decryptApiSecret(account)
+            val apiPassphrase = decryptApiPassphrase(account)
 
             // 创建带认证的 API 客户端（需要钱包地址用于 POLY_ADDRESS 请求头）
             val clobApi = retrofitFactory.createClobApi(apiKey, apiSecret, apiPassphrase, account.walletAddress)

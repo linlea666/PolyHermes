@@ -41,22 +41,42 @@ class CopyOrderTrackingService(
     
     /**
      * 解密账户私钥
-     * 支持向后兼容：如果私钥未加密（明文），直接返回
      */
     private fun decryptPrivateKey(account: Account): String {
         return try {
-            // 尝试解密（如果已加密）
-            if (cryptoUtils.isEncrypted(account.privateKey)) {
-                cryptoUtils.decrypt(account.privateKey)
-            } else {
-                // 向后兼容：如果私钥未加密（可能是旧数据），直接返回
-                logger.warn("账户 ${account.id} 的私钥未加密，建议重新导入账户以加密私钥")
-                account.privateKey
-            }
+            cryptoUtils.decrypt(account.privateKey)
         } catch (e: Exception) {
             logger.error("解密私钥失败: accountId=${account.id}", e)
             throw RuntimeException("解密私钥失败: ${e.message}", e)
         }
+    }
+    
+    /**
+     * 解密账户 API Secret
+     */
+    private fun decryptApiSecret(account: Account): String {
+        return account.apiSecret?.let { secret ->
+            try {
+                cryptoUtils.decrypt(secret)
+            } catch (e: Exception) {
+                logger.error("解密 API Secret 失败: accountId=${account.id}", e)
+                throw RuntimeException("解密 API Secret 失败: ${e.message}", e)
+            }
+        } ?: throw IllegalStateException("账户未配置 API Secret")
+    }
+    
+    /**
+     * 解密账户 API Passphrase
+     */
+    private fun decryptApiPassphrase(account: Account): String {
+        return account.apiPassphrase?.let { passphrase ->
+            try {
+                cryptoUtils.decrypt(passphrase)
+            } catch (e: Exception) {
+                logger.error("解密 API Passphrase 失败: accountId=${account.id}", e)
+                throw RuntimeException("解密 API Passphrase 失败: ${e.message}", e)
+            }
+        } ?: throw IllegalStateException("账户未配置 API Passphrase")
     }
     
     /**
@@ -227,11 +247,25 @@ class CopyOrderTrackingService(
                     // 计算价格（应用价格容忍度）
                     val buyPrice = calculateAdjustedPrice(trade.price.toSafeBigDecimal(), template, isBuy = true)
                     
+                    // 解密 API 凭证
+                    val apiSecret = try {
+                        decryptApiSecret(account)
+                    } catch (e: Exception) {
+                        logger.warn("解密 API 凭证失败，跳过创建订单: accountId=${account.id}, error=${e.message}")
+                        continue
+                    }
+                    val apiPassphrase = try {
+                        decryptApiPassphrase(account)
+                    } catch (e: Exception) {
+                        logger.warn("解密 API 凭证失败，跳过创建订单: accountId=${account.id}, error=${e.message}")
+                        continue
+                    }
+                    
                     // 创建带认证的CLOB API客户端
                     val clobApi = retrofitFactory.createClobApi(
                         account.apiKey!!,
-                        account.apiSecret!!,
-                        account.apiPassphrase!!,
+                        apiSecret,
+                        apiPassphrase,
                         account.walletAddress
                     )
                     
@@ -467,7 +501,6 @@ class CopyOrderTrackingService(
         
         // 7. 解密私钥（在方法开始时解密一次，后续复用）
         val decryptedPrivateKey = decryptPrivateKey(account)
-        
         // 8. 创建并签名卖出订单
         val signedOrder = try {
             orderSigningService.createAndSignOrder(

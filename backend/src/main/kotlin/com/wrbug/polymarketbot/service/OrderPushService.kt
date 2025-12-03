@@ -25,7 +25,8 @@ class OrderPushService(
     private val accountRepository: AccountRepository,
     private val objectMapper: ObjectMapper,
     private val clobService: PolymarketClobService,
-    private val retrofitFactory: RetrofitFactory  // 用于创建 Gamma API 客户端（不需要认证）
+    private val retrofitFactory: RetrofitFactory,  // 用于创建 Gamma API 客户端（不需要认证）
+    private val cryptoUtils: com.wrbug.polymarketbot.util.CryptoUtils
 ) {
 
     private val logger = LoggerFactory.getLogger(OrderPushService::class.java)
@@ -152,6 +153,34 @@ class OrderPushService(
                 account.apiSecret!!.isNotBlank() &&
                 account.apiPassphrase!!.isNotBlank()
     }
+    
+    /**
+     * 解密账户 API Secret
+     */
+    private fun decryptApiSecret(account: Account): String {
+        return account.apiSecret?.let { secret ->
+            try {
+                cryptoUtils.decrypt(secret)
+            } catch (e: Exception) {
+                logger.error("解密 API Secret 失败: accountId=${account.id}", e)
+                throw RuntimeException("解密 API Secret 失败: ${e.message}", e)
+            }
+        } ?: throw IllegalStateException("账户未配置 API Secret")
+    }
+    
+    /**
+     * 解密账户 API Passphrase
+     */
+    private fun decryptApiPassphrase(account: Account): String {
+        return account.apiPassphrase?.let { passphrase ->
+            try {
+                cryptoUtils.decrypt(passphrase)
+            } catch (e: Exception) {
+                logger.error("解密 API Passphrase 失败: accountId=${account.id}", e)
+                throw RuntimeException("解密 API Passphrase 失败: ${e.message}", e)
+            }
+        } ?: throw IllegalStateException("账户未配置 API Passphrase")
+    }
 
     /**
      * 为指定账户建立 User Channel 连接
@@ -236,11 +265,25 @@ class OrderPushService(
      */
     private fun sendSubscribeMessage(client: PolymarketWebSocketClient, account: Account) {
         try {
+            // 解密 API 凭证
+            val apiSecret = try {
+                decryptApiSecret(account)
+            } catch (e: Exception) {
+                logger.error("解密 API 凭证失败，无法发送订阅消息: accountId=${account.id}, error=${e.message}")
+                return
+            }
+            val apiPassphrase = try {
+                decryptApiPassphrase(account)
+            } catch (e: Exception) {
+                logger.error("解密 API 凭证失败，无法发送订阅消息: accountId=${account.id}, error=${e.message}")
+                return
+            }
+            
             val subscribeMessage = mapOf(
                 "auth" to mapOf(
                     "apiKey" to account.apiKey,
-                    "secret" to account.apiSecret,
-                    "passphrase" to account.apiPassphrase
+                    "secret" to apiSecret,
+                    "passphrase" to apiPassphrase
                 ),
                 "type" to "user",
                 "markets" to emptyList<String>(),  // 空数组表示订阅所有市场
@@ -321,11 +364,25 @@ class OrderPushService(
             }
             
             // 通过 PolymarketClobService 获取订单详情（需要 L2 认证）
+            // 解密 API 凭证
+            val apiSecret = try {
+                decryptApiSecret(account)
+            } catch (e: Exception) {
+                logger.error("解密 API 凭证失败，无法获取订单详情: accountId=${account.id}, error=${e.message}")
+                return null
+            }
+            val apiPassphrase = try {
+                decryptApiPassphrase(account)
+            } catch (e: Exception) {
+                logger.error("解密 API 凭证失败，无法获取订单详情: accountId=${account.id}, error=${e.message}")
+                return null
+            }
+            
             val result = clobService.getOrder(
                 orderId = orderId,
                 apiKey = account.apiKey!!,
-                apiSecret = account.apiSecret!!,
-                apiPassphrase = account.apiPassphrase!!,
+                apiSecret = apiSecret,
+                apiPassphrase = apiPassphrase,
                 walletAddress = account.walletAddress
             )
             
