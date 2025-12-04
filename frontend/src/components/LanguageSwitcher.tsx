@@ -22,7 +22,9 @@ const LanguageSwitcher: React.FC = () => {
   const handleChange = async (value: string) => {
     setCurrentLang(value)
     await i18n.changeLanguage(value)
-    // 保存到 localStorage
+    // 保存到 localStorage（统一使用 i18n_language）
+    localStorage.setItem('i18n_language', value)
+    // 同时保存到 i18nextLng（i18next 默认使用的 key，用于兼容）
     localStorage.setItem('i18nextLng', value)
     // 刷新页面以应用 Ant Design 的 locale 和所有翻译
     window.location.reload()
