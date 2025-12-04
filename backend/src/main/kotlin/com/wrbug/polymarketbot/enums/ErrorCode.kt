@@ -132,19 +132,34 @@ enum class ErrorCode(
     POSITION_INSUFFICIENT(4503, "仓位不足", "error.position_insufficient"),
     POSITION_ALREADY_REDEEMED(4504, "仓位已赎回", "error.position_already_redeemed"),
     
+    // 通知配置相关 (4601-4699)
+    NOTIFICATION_CONFIG_NOT_FOUND(4601, "通知配置不存在", "error.notification_config_not_found"),
+    NOTIFICATION_CONFIG_ID_EMPTY(4602, "配置ID不能为空", "error.notification_config_id_empty"),
+    NOTIFICATION_CONFIG_TYPE_EMPTY(4603, "推送类型不能为空", "error.notification_config_type_empty"),
+    NOTIFICATION_CONFIG_NAME_EMPTY(4604, "配置名称不能为空", "error.notification_config_name_empty"),
+    NOTIFICATION_CONFIG_DATA_EMPTY(4605, "配置信息不能为空", "error.notification_config_data_empty"),
+    NOTIFICATION_CONFIG_BOT_TOKEN_EMPTY(4606, "Bot Token 不能为空", "error.notification_config_bot_token_empty"),
+    NOTIFICATION_CONFIG_CREATE_FAILED(4607, "创建配置失败", "error.notification_config_create_failed"),
+    NOTIFICATION_CONFIG_UPDATE_FAILED(4608, "更新配置失败", "error.notification_config_update_failed"),
+    NOTIFICATION_CONFIG_DELETE_FAILED(4609, "删除配置失败", "error.notification_config_delete_failed"),
+    NOTIFICATION_CONFIG_UPDATE_ENABLED_FAILED(4610, "更新启用状态失败", "error.notification_config_update_enabled_failed"),
+    NOTIFICATION_CONFIG_FETCH_FAILED(4611, "获取配置失败", "error.notification_config_fetch_failed"),
+    NOTIFICATION_TEST_FAILED(4612, "发送测试消息失败，请检查配置", "error.notification_test_failed"),
+    NOTIFICATION_GET_CHAT_IDS_FAILED(4613, "获取 Chat IDs 失败", "error.notification_get_chat_ids_failed"),
+    
     // 账户相关业务错误 (4601-4699)
     ACCOUNT_ALREADY_EXISTS(4601, "账户已存在", "error.account_already_exists"),
-    ACCOUNT_IS_DEFAULT(4602, "账户已是默认账户", "error.account_is_default"),
-    ACCOUNT_HAS_ACTIVE_ORDERS(4603, "账户有活跃订单", "error.account_has_active_orders"),
-    ACCOUNT_IS_LAST_ONE(4604, "不能删除最后一个账户", "error.account_is_last_one"),
-    ACCOUNT_API_KEY_CREATE_FAILED(4605, "自动获取 API Key 失败", "error.account_api_key_create_failed"),
-    ACCOUNT_PROXY_ADDRESS_FETCH_FAILED(4606, "获取代理地址失败", "error.account_proxy_address_fetch_failed"),
-    ACCOUNT_BALANCE_FETCH_FAILED(4607, "查询账户余额失败", "error.account_balance_fetch_failed"),
-    ACCOUNT_POSITIONS_FETCH_FAILED(4608, "查询仓位列表失败", "error.account_positions_fetch_failed"),
+    ACCOUNT_IS_DEFAULT(4702, "账户已是默认账户", "error.account_is_default"),
+    ACCOUNT_HAS_ACTIVE_ORDERS(4703, "账户有活跃订单", "error.account_has_active_orders"),
+    ACCOUNT_IS_LAST_ONE(4704, "不能删除最后一个账户", "error.account_is_last_one"),
+    ACCOUNT_API_KEY_CREATE_FAILED(4705, "自动获取 API Key 失败", "error.account_api_key_create_failed"),
+    ACCOUNT_PROXY_ADDRESS_FETCH_FAILED(4706, "获取代理地址失败", "error.account_proxy_address_fetch_failed"),
+    ACCOUNT_BALANCE_FETCH_FAILED(4707, "查询账户余额失败", "error.account_balance_fetch_failed"),
+    ACCOUNT_POSITIONS_FETCH_FAILED(4708, "查询仓位列表失败", "error.account_positions_fetch_failed"),
     
-    // 统计相关 (4701-4799)
-    STATISTICS_FETCH_FAILED(4701, "获取统计信息失败", "error.statistics_fetch_failed"),
-    ORDER_LIST_FETCH_FAILED(4702, "查询订单列表失败", "error.order_list_fetch_failed"),
+    // 统计相关 (4801-4899)
+    STATISTICS_FETCH_FAILED(4801, "获取统计信息失败", "error.statistics_fetch_failed"),
+    ORDER_LIST_FETCH_FAILED(4802, "查询订单列表失败", "error.order_list_fetch_failed"),
     
     // ==================== 服务器内部错误 (5001-5999) ====================
     SERVER_ERROR(5001, "服务器内部错误", "error.server.error"),

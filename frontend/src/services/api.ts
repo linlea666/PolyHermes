@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosError } from 'axios'
-import type { ApiResponse } from '../types'
+import type { ApiResponse, NotificationConfig, NotificationConfigRequest, NotificationConfigUpdateRequest } from '../types'
 import { getToken, setToken, removeToken } from '../utils'
 import { wsManager } from './websocket'
 import i18n from '../i18n/config'
@@ -474,6 +474,59 @@ export const apiService = {
           responseTime?: number
         }>
       }>>('/proxy-config/api-health-check', {})
+  },
+  
+  /**
+   * 消息推送配置 API
+   */
+  notifications: {
+    /**
+     * 获取配置列表
+     */
+    list: (data?: { type?: string }) =>
+      apiClient.post<ApiResponse<NotificationConfig[]>>('/notifications/configs/list', data || {}),
+    
+    /**
+     * 获取配置详情
+     */
+    detail: (data: { id: number }) =>
+      apiClient.post<ApiResponse<NotificationConfig>>('/notifications/configs/detail', data),
+    
+    /**
+     * 创建配置
+     */
+    create: (data: NotificationConfigRequest) =>
+      apiClient.post<ApiResponse<NotificationConfig>>('/notifications/configs/create', data),
+    
+    /**
+     * 更新配置
+     */
+    update: (data: NotificationConfigUpdateRequest) =>
+      apiClient.post<ApiResponse<NotificationConfig>>('/notifications/configs/update', data),
+    
+    /**
+     * 更新启用状态
+     */
+    updateEnabled: (data: { id: number; enabled: boolean }) =>
+      apiClient.post<ApiResponse<NotificationConfig>>('/notifications/configs/update-enabled', data),
+    
+    /**
+     * 删除配置
+     */
+    delete: (data: { id: number }) =>
+      apiClient.post<ApiResponse<void>>('/notifications/configs/delete', data),
+    
+    /**
+     * 测试通知
+     */
+    test: (data?: { message?: string }) =>
+      apiClient.post<ApiResponse<boolean>>('/notifications/test', data || {}),
+    
+    /**
+     * 获取 Telegram Chat IDs
+     */
+    getTelegramChatIds: (data: { botToken: string }) =>
+      apiClient.post<ApiResponse<string[]>>('/notifications/telegram/get-chat-ids', data)
   }
 }
 

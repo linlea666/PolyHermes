@@ -18,12 +18,14 @@ import {
   GithubOutlined,
   TwitterOutlined,
   GlobalOutlined,
-  CheckCircleOutlined
+  CheckCircleOutlined,
+  NotificationOutlined
 } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
 import type { ReactNode } from 'react'
 import { removeToken } from '../utils'
 import { wsManager } from '../services/websocket'
+import Logo from './Logo'
 
 const { Header, Content, Sider } = AntLayout
 
@@ -133,6 +135,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           key: '/system-settings/proxy',
           icon: <LinkOutlined />,
           label: t('menu.proxy')
+        },
+        {
+          key: '/system-settings/notifications',
+          icon: <NotificationOutlined />,
+          label: t('menu.notifications')
         }
       ]
     },
@@ -198,9 +205,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           alignItems: 'center',
           justifyContent: 'space-between'
         }}>
-          <div style={{ color: '#fff', fontSize: '18px', fontWeight: 'bold' }}>
-            PolyHermes
-          </div>
+          <Logo 
+            size="normal" 
+            darkMode={true}
+          />
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <a
               href="https://github.com/WrBug/PolyHermes"

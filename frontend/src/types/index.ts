@@ -600,3 +600,49 @@ export interface OrderTrackingRequest {
   buyOrderId?: string
 }
 
+/**
+ * 消息推送配置
+ */
+export interface NotificationConfig {
+  id?: number
+  type: string  // telegram、discord、slack 等
+  name: string  // 配置名称
+  enabled: boolean  // 是否启用
+  config: {
+    botToken?: string  // Telegram Bot Token
+    chatIds?: string[]  // Telegram Chat IDs
+    [key: string]: any  // 其他配置字段
+  }
+  createdAt?: number
+  updatedAt?: number
+}
+
+/**
+ * 通知配置请求
+ */
+export interface NotificationConfigRequest {
+  type: string
+  name: string
+  enabled?: boolean
+  config: {
+    botToken?: string
+    chatIds?: string[] | string  // 支持数组或逗号分隔的字符串
+    [key: string]: any
+  }
+}
+
+/**
+ * 通知配置更新请求
+ */
+export interface NotificationConfigUpdateRequest {
+  id: number
+  type: string
+  name: string
+  enabled?: boolean
+  config: {
+    botToken?: string
+    chatIds?: string[] | string
+    [key: string]: any
+  }
+}
+

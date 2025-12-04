@@ -32,6 +32,7 @@ import SystemSettings from './pages/SystemSettings'
 import LanguageSettings from './pages/LanguageSettings'
 import ApiHealthStatus from './pages/ApiHealthStatus'
 import ProxySettings from './pages/ProxySettings'
+import NotificationSettings from './pages/NotificationSettings'
 import { wsManager } from './services/websocket'
 import type { OrderPushMessage } from './types'
 import { apiService } from './services/api'
@@ -247,6 +248,7 @@ function App() {
           <Route path="/system-settings/language" element={<ProtectedRoute><LanguageSettings /></ProtectedRoute>} />
           <Route path="/system-settings/api-health" element={<ProtectedRoute><ApiHealthStatus /></ProtectedRoute>} />
           <Route path="/system-settings/proxy" element={<ProtectedRoute><ProxySettings /></ProtectedRoute>} />
+          <Route path="/system-settings/notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
           
           {/* 默认重定向到登录页 */}
           <Route path="*" element={<Navigate to="/login" replace />} />

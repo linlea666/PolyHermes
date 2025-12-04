@@ -330,3 +330,49 @@ const ResponsiveTable: React.FC = () => {
 - ❌ 禁止使用过小的触摸目标（< 44x44px）
 - ❌ 禁止忽略移动端性能优化
 - ❌ 禁止使用桌面端专用的交互方式（如 hover）
+
+### 多语言使用规范
+- **必须**使用多语言（i18n）进行所有文本显示
+- **禁止**在组件中硬编码中文或英文文本
+- **必须**使用 `useTranslation` Hook 获取翻译函数
+- **必须**在语言文件中定义所有显示的文本
+- **必须**支持至少中文（简体/繁体）和英文
+
+#### 多语言使用示例
+
+```typescript
+// ✅ 正确：使用多语言
+import { useTranslation } from 'react-i18next'
+
+const MyComponent: React.FC = () => {
+  const { t } = useTranslation()
+  
+  return (
+    <div>
+      <h1>{t('page.title')}</h1>
+      <Button>{t('common.save')}</Button>
+    </div>
+  )
+}
+
+// ❌ 错误：硬编码文本
+const MyComponent: React.FC = () => {
+  return (
+    <div>
+      <h1>页面标题</h1>  {/* 禁止硬编码 */}
+      <Button>保存</Button>  {/* 禁止硬编码 */}
+    </div>
+  )
+}
+```
+
+#### 语言文件结构
+- 语言文件位置：`src/locales/{locale}/common.json`
+- 支持的语言：`zh-CN`（简体中文）、`zh-TW`（繁体中文）、`en`（英文）
+- 键名使用点号分隔的层级结构，如：`notificationSettings.title`
+
+#### 添加新翻译的步骤
+1. 在 `src/locales/zh-CN/common.json` 中添加中文翻译
+2. 在 `src/locales/zh-TW/common.json` 中添加繁体中文翻译
+3. 在 `src/locales/en/common.json` 中添加英文翻译
+4. 在组件中使用 `t('key')` 获取翻译

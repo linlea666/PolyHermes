@@ -535,3 +535,122 @@ if (targetOutcomeIndex >= 0) {
     // 使用 targetOutcomeIndex 进行判断
 }
 ```
+
+## 多语言使用规范
+
+### 错误消息和响应文本
+- **禁止**在代码中硬编码中文或英文错误消息
+- **必须**使用 `ErrorCode` 枚举定义错误码和消息
+- **必须**使用 `ApiResponse.error(ErrorCode, messageSource)` 或 `MessageUtils.getMessage()` 获取国际化消息
+- **禁止**直接使用 `ApiResponse.paramError("硬编码消息")` 或 `ApiResponse.serverError("硬编码消息")`
+- 错误消息的默认语言使用中文（在 `ErrorCode` 枚举中定义），通过 `MessageSource` 支持多语言
+
+### 使用 ErrorCode 和 MessageSource
+项目已经实现了国际化支持，必须使用以下方式：
+
+```kotlin
+// ❌ 错误：硬编码错误消息
+return ResponseEntity.ok(ApiResponse.paramError("配置ID不能为空"))
+return ResponseEntity.ok(ApiResponse.serverError("获取配置列表失败：${e.message}"))
+
+// ✅ 正确：使用 ErrorCode 枚举
+return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, messageSource = messageSource))
+
+// ✅ 正确：使用 ErrorCode 和自定义消息（如果需要动态消息）
+return ResponseEntity.ok(ApiResponse.error(
+    ErrorCode.PARAM_ERROR, 
+    customMsg = "配置ID不能为空",
+    messageSource = messageSource
+))
+
+// ✅ 正确：使用 MessageUtils
+@Autowired
+private lateinit var messageUtils: MessageUtils
+
+return ResponseEntity.ok(ApiResponse.error(
+    ErrorCode.PARAM_EMPTY,
+    messageSource = messageSource
+))
+```
+
+### 添加新的错误码
+如果需要添加新的错误码，必须在 `ErrorCode` 枚举中定义：
+
+```kotlin
+enum class ErrorCode(
+    val code: Int,
+    val message: String,  // 默认消息（中文）
+    val messageKey: String  // 国际化消息键
+) {
+    // 新错误码示例
+    NOTIFICATION_CONFIG_NOT_FOUND(3009, "通知配置不存在", "error.notification_config_not_found"),
+    NOTIFICATION_CONFIG_INVALID(4009, "通知配置无效", "error.notification_config_invalid"),
+}
+```
+
+然后在语言资源文件中添加对应的翻译：
+- `src/main/resources/messages_zh_CN.properties`
+- `src/main/resources/messages_zh_TW.properties`
+- `src/main/resources/messages_en.properties`
+
+### 日志消息规范
+- **日志消息可以使用中文或英文**，便于开发调试
+- **禁止**在日志中硬编码用户可见的错误消息（应该使用 ErrorCode）
+- 日志消息应该清晰、简洁，便于排查问题
+- 日志中的业务数据（如账户名、订单ID等）可以使用原始值
+
+### 代码注释规范
+- **代码注释可以使用中文或英文**
+- **业务逻辑注释**建议使用中文，便于团队理解
+- **API 文档注释**（KDoc）建议使用中文，但也可以使用英文
+- **类和方法注释**应该清晰说明功能和参数
+
+### 数据库字段和配置
+- **数据库字段名**使用英文（snake_case）
+- **配置项名称**使用英文（kebab-case 或 dot.notation）
+- **枚举值**使用英文（UPPER_SNAKE_CASE）
+- **常量定义**使用英文（UPPER_SNAKE_CASE）
+
+### 多语言支持策略
+1. **API 响应消息**：使用 `ErrorCode` 枚举，通过 `MessageSource` 支持多语言
+2. **错误码**：使用 `ErrorCode` 枚举，包含 `code`、`message`（默认中文）和 `messageKey`（国际化键）
+3. **日志消息**：可以使用中文或英文，便于开发调试
+4. **代码注释**：可以使用中文或英文，建议使用中文
+5. **业务数据**：根据实际需求，可以包含多语言内容（如市场标题、描述等）
+
+### Controller 中使用多语言示例
+
+```kotlin
+@RestController
+class NotificationController(
+    private val notificationConfigService: NotificationConfigService,
+    private val messageSource: MessageSource  // 注入 MessageSource
+) {
+    @PostMapping("/configs/list")
+    fun list(@RequestBody request: NotificationConfigListRequest): ResponseEntity<ApiResponse<List<NotificationConfigDto>>> {
+        return try {
+            // ... 业务逻辑
+            ResponseEntity.ok(ApiResponse.success(configs))
+        } catch (e: Exception) {
+            logger.error("获取配置列表失败: ${e.message}", e)
+            // ✅ 正确：使用 ErrorCode 和 MessageSource
+            ResponseEntity.ok(ApiResponse.error(
+                ErrorCode.SERVER_ERROR,
+                messageSource = messageSource
+            ))
+        }
+    }
+    
+    @PostMapping("/configs/detail")
+    fun detail(@RequestBody request: NotificationConfigDetailRequest): ResponseEntity<ApiResponse<NotificationConfigDto>> {
+        if (request.id == null) {
+            // ✅ 正确：使用 ErrorCode
+            return ResponseEntity.ok(ApiResponse.error(
+                ErrorCode.PARAM_EMPTY,
+                messageSource = messageSource
+            ))
+        }
+        // ... 业务逻辑
+    }
+}
+```

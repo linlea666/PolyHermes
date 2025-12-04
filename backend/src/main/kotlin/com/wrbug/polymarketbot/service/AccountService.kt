@@ -8,7 +8,7 @@ import com.wrbug.polymarketbot.util.RetrofitFactory
 import com.wrbug.polymarketbot.util.toSafeBigDecimal
 import com.wrbug.polymarketbot.util.eq
 import com.wrbug.polymarketbot.util.JsonUtils
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -27,10 +27,14 @@ class AccountService(
     private val apiKeyService: PolymarketApiKeyService,
     private val orderPushService: OrderPushService,
     private val orderSigningService: OrderSigningService,
-    private val cryptoUtils: com.wrbug.polymarketbot.util.CryptoUtils
+    private val cryptoUtils: com.wrbug.polymarketbot.util.CryptoUtils,
+    private val telegramNotificationService: TelegramNotificationService? = null  // 可选，避免循环依赖
 ) {
 
     private val logger = LoggerFactory.getLogger(AccountService::class.java)
+    
+    // 协程作用域（用于异步发送通知）
+    private val notificationScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // 市价单价格调整系数（在最优价基础上调整，确保更快成交）
     // 市价买单：bestAsk + BUY_PRICE_ADJUSTMENT（加价，确保能立即成交）
@@ -859,9 +863,60 @@ class AccountService(
             if (orderResponse.isSuccessful && orderResponse.body() != null) {
                 val response = orderResponse.body()!!
                 if (response.success) {
+                    val orderId = response.orderId ?: ""
+                    
+                    // 发送订单成功通知（异步，不阻塞）
+                    notificationScope.launch {
+                        try {
+                            // 获取市场信息（标题和slug）
+                            val marketInfo = withContext(Dispatchers.IO) {
+                                try {
+                                    val gammaApi = retrofitFactory.createGammaApi()
+                                    val marketResponse = gammaApi.listMarkets(conditionIds = listOf(request.marketId))
+                                    if (marketResponse.isSuccessful && marketResponse.body() != null) {
+                                        marketResponse.body()!!.firstOrNull()
+                                    } else {
+                                        null
+                                    }
+                                } catch (e: Exception) {
+                                    logger.warn("获取市场信息失败: ${e.message}", e)
+                                    null
+                                }
+                            }
+                            
+                            val marketTitle = marketInfo?.question ?: request.marketId
+                            val marketSlug = marketInfo?.slug
+                            
+                            // 获取当前语言设置（从 LocaleContextHolder）
+                            val locale = try {
+                                org.springframework.context.i18n.LocaleContextHolder.getLocale()
+                            } catch (e: Exception) {
+                                java.util.Locale("zh", "CN")  // 默认简体中文
+                            }
+                            
+                            telegramNotificationService?.sendOrderSuccessNotification(
+                                orderId = orderId,
+                                marketTitle = marketTitle,
+                                marketId = request.marketId,
+                                marketSlug = marketSlug,
+                                side = request.side,
+                                accountName = account.accountName,
+                                walletAddress = account.walletAddress,
+                                clobApi = clobApi,
+                                apiKey = account.apiKey,
+                                apiSecret = try { cryptoUtils.decrypt(account.apiSecret!!) } catch (e: Exception) { null },
+                                apiPassphrase = try { cryptoUtils.decrypt(account.apiPassphrase!!) } catch (e: Exception) { null },
+                                walletAddressForApi = account.walletAddress,
+                                locale = locale
+                            )
+                        } catch (e: Exception) {
+                            logger.warn("发送订单成功通知失败: ${e.message}", e)
+                        }
+                    }
+                    
                     Result.success(
                         PositionSellResponse(
-                            orderId = response.orderId ?: "",
+                            orderId = orderId,
                             marketId = request.marketId,
                             side = request.side,
                             orderType = request.orderType,
@@ -875,6 +930,54 @@ class AccountService(
                     val errorMsg = response.errorMsg ?: "未知错误"
                     val fullErrorMsg = "创建订单失败: accountId=${account.id}, marketId=${request.marketId}, side=${request.side}, orderType=${request.orderType}, price=${if (request.orderType == "LIMIT") sellPrice else "MARKET"}, quantity=${sellQuantity.toPlainString()}, errorMsg=$errorMsg"
                     logger.error(fullErrorMsg)
+                    
+                    // 发送订单失败通知（异步，不阻塞）
+                    notificationScope.launch {
+                        try {
+                            // 获取市场信息（标题和slug）
+                            val marketInfo = withContext(Dispatchers.IO) {
+                                try {
+                                    val gammaApi = retrofitFactory.createGammaApi()
+                                    val marketResponse = gammaApi.listMarkets(conditionIds = listOf(request.marketId))
+                                    if (marketResponse.isSuccessful && marketResponse.body() != null) {
+                                        marketResponse.body()!!.firstOrNull()
+                                    } else {
+                                        null
+                                    }
+                                } catch (e: Exception) {
+                                    logger.warn("获取市场信息失败: ${e.message}", e)
+                                    null
+                                }
+                            }
+                            
+                            val marketTitle = marketInfo?.question ?: request.marketId
+                            val marketSlug = marketInfo?.slug
+                            
+                            // 获取当前语言设置（从 LocaleContextHolder）
+                            val locale = try {
+                                org.springframework.context.i18n.LocaleContextHolder.getLocale()
+                            } catch (e: Exception) {
+                                java.util.Locale("zh", "CN")  // 默认简体中文
+                            }
+                            
+                            telegramNotificationService?.sendOrderFailureNotification(
+                                marketTitle = marketTitle,
+                                marketId = request.marketId,
+                                marketSlug = marketSlug,
+                                side = request.side,
+                                outcome = null,  // 失败时可能没有 outcome
+                                price = if (request.orderType == "LIMIT") sellPrice.toString() else "MARKET",
+                                size = sellQuantity.toString(),
+                                errorMessage = errorMsg,  // 只传递后端返回的 msg
+                                accountName = account.accountName,
+                                walletAddress = account.walletAddress,
+                                locale = locale
+                            )
+                        } catch (e: Exception) {
+                            logger.warn("发送订单失败通知失败: ${e.message}", e)
+                        }
+                    }
+                    
                     Result.failure(Exception(fullErrorMsg))
                 }
             } else {
@@ -885,6 +988,57 @@ class AccountService(
                 }
                 val fullErrorMsg = "创建订单失败: accountId=${account.id}, marketId=${request.marketId}, side=${request.side}, orderType=${request.orderType}, price=${if (request.orderType == "LIMIT") sellPrice else "MARKET"}, quantity=${sellQuantity.toPlainString()}, code=${orderResponse.code()}, message=${orderResponse.message()}${if (errorBody != null) ", errorBody=$errorBody" else ""}"
                 logger.error(fullErrorMsg)
+                
+                // 发送订单失败通知（异步，不阻塞）
+                notificationScope.launch {
+                    try {
+                        // 获取市场信息（标题和slug）
+                        val marketInfo = withContext(Dispatchers.IO) {
+                            try {
+                                val gammaApi = retrofitFactory.createGammaApi()
+                                val marketResponse = gammaApi.listMarkets(conditionIds = listOf(request.marketId))
+                                if (marketResponse.isSuccessful && marketResponse.body() != null) {
+                                    marketResponse.body()!!.firstOrNull()
+                                } else {
+                                    null
+                                }
+                            } catch (e: Exception) {
+                                logger.warn("获取市场信息失败: ${e.message}", e)
+                                null
+                            }
+                        }
+                        
+                        val marketTitle = marketInfo?.question ?: request.marketId
+                        val marketSlug = marketInfo?.slug
+                        
+                        // 获取当前语言设置（从 LocaleContextHolder）
+                        val locale = try {
+                            org.springframework.context.i18n.LocaleContextHolder.getLocale()
+                        } catch (e: Exception) {
+                            java.util.Locale("zh", "CN")  // 默认简体中文
+                        }
+                        
+                        // 只传递后端返回的 msg，不传递完整堆栈
+                        val errorMsg = orderResponse.body()?.errorMsg ?: "创建订单失败"
+                        
+                        telegramNotificationService?.sendOrderFailureNotification(
+                            marketTitle = marketTitle,
+                            marketId = request.marketId,
+                            marketSlug = marketSlug,
+                            side = request.side,
+                            outcome = null,  // 失败时可能没有 outcome
+                            price = if (request.orderType == "LIMIT") sellPrice.toString() else "MARKET",
+                            size = sellQuantity.toString(),
+                            errorMessage = errorMsg,  // 只传递后端返回的 msg
+                            accountName = account.accountName,
+                            walletAddress = account.walletAddress,
+                            locale = locale
+                        )
+                    } catch (e: Exception) {
+                        logger.warn("发送订单失败通知失败: ${e.message}", e)
+                    }
+                }
+                
                 Result.failure(Exception(fullErrorMsg))
             }
         } catch (e: Exception) {

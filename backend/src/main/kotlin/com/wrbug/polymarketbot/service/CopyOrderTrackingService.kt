@@ -7,7 +7,7 @@ import com.wrbug.polymarketbot.entity.*
 import com.wrbug.polymarketbot.repository.*
 import com.wrbug.polymarketbot.util.RetrofitFactory
 import com.wrbug.polymarketbot.util.*
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
@@ -34,10 +34,14 @@ class CopyOrderTrackingService(
     private val orderSigningService: OrderSigningService,
     private val blockchainService: BlockchainService,
     private val retrofitFactory: RetrofitFactory,
-    private val cryptoUtils: com.wrbug.polymarketbot.util.CryptoUtils
+    private val cryptoUtils: com.wrbug.polymarketbot.util.CryptoUtils,
+    private val telegramNotificationService: TelegramNotificationService? = null  // 可选，避免循环依赖
 ) {
     
     private val logger = LoggerFactory.getLogger(CopyOrderTrackingService::class.java)
+    
+    // 协程作用域（用于异步发送通知）
+    private val notificationScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
     /**
      * 解密账户私钥
@@ -301,6 +305,54 @@ class CopyOrderTrackingService(
                             errorMessage = errorMsg,
                             retryCount = 1  // 已重试一次
                         )
+                        
+                        // 发送订单失败通知（异步，不阻塞）
+                        notificationScope.launch {
+                            try {
+                                // 获取市场信息（标题和slug）
+                                val marketInfo = withContext(Dispatchers.IO) {
+                                    try {
+                                        val gammaApi = retrofitFactory.createGammaApi()
+                                        val marketResponse = gammaApi.listMarkets(conditionIds = listOf(trade.market))
+                                        if (marketResponse.isSuccessful && marketResponse.body() != null) {
+                                            marketResponse.body()!!.firstOrNull()
+                                        } else {
+                                            null
+                                        }
+                                    } catch (e: Exception) {
+                                        logger.warn("获取市场信息失败: ${e.message}", e)
+                                        null
+                                    }
+                                }
+                                
+                                val marketTitle = marketInfo?.question ?: trade.market
+                                val marketSlug = marketInfo?.slug
+                                
+                                // 获取当前语言设置（从 LocaleContextHolder）
+                                val locale = try {
+                                    org.springframework.context.i18n.LocaleContextHolder.getLocale()
+                                } catch (e: Exception) {
+                                    java.util.Locale("zh", "CN")  // 默认简体中文
+                                }
+                                
+                                telegramNotificationService?.sendOrderFailureNotification(
+                                    marketTitle = marketTitle,
+                                    marketId = trade.market,
+                                    marketSlug = marketSlug,
+                                    side = "BUY",
+                                    outcome = null,  // 失败时可能没有 outcome
+                                    price = buyPrice.toString(),
+                                    size = finalBuyQuantity.toString(),
+                                    errorMessage = errorMsg,  // 只传递后端返回的 msg
+                                    accountName = account.accountName,
+                                    walletAddress = account.walletAddress,
+                                    locale = locale
+                                )
+                            } catch (e: Exception) {
+                                logger.warn("发送订单失败通知失败: ${e.message}", e)
+                            }
+                        }
+                        
                         continue
                     }
                     
@@ -324,6 +376,80 @@ class CopyOrderTrackingService(
                     )
                     
                     copyOrderTrackingRepository.save(tracking)
+                    
+                    // 发送订单成功通知（异步，不阻塞）
+                    notificationScope.launch {
+                        try {
+                            // 获取市场信息（标题和slug）
+                            val marketInfo = withContext(Dispatchers.IO) {
+                                try {
+                                    val gammaApi = retrofitFactory.createGammaApi()
+                                    val marketResponse = gammaApi.listMarkets(conditionIds = listOf(trade.market))
+                                    if (marketResponse.isSuccessful && marketResponse.body() != null) {
+                                        marketResponse.body()!!.firstOrNull()
+                                    } else {
+                                        null
+                                    }
+                                } catch (e: Exception) {
+                                    logger.warn("获取市场信息失败: ${e.message}", e)
+                                    null
+                                }
+                            }
+                            
+                            val marketTitle = marketInfo?.question ?: trade.market
+                            val marketSlug = marketInfo?.slug
+                            
+                            // 重新创建 CLOB API 客户端用于查询订单详情
+                            val apiSecret = try {
+                                decryptApiSecret(account)
+                            } catch (e: Exception) {
+                                logger.warn("解密 API Secret 失败: ${e.message}", e)
+                                null
+                            }
+                            val apiPassphrase = try {
+                                decryptApiPassphrase(account)
+                            } catch (e: Exception) {
+                                logger.warn("解密 API Passphrase 失败: ${e.message}", e)
+                                null
+                            }
+                            
+                            val clobApiForQuery = if (account.apiKey != null && apiSecret != null && apiPassphrase != null) {
+                                retrofitFactory.createClobApi(
+                                    account.apiKey!!,
+                                    apiSecret,
+                                    apiPassphrase,
+                                    account.walletAddress
+                                )
+                            } else {
+                                null
+                            }
+                            
+                            // 获取当前语言设置（从 LocaleContextHolder）
+                            val locale = try {
+                                org.springframework.context.i18n.LocaleContextHolder.getLocale()
+                            } catch (e: Exception) {
+                                java.util.Locale("zh", "CN")  // 默认简体中文
+                            }
+                            
+                            telegramNotificationService?.sendOrderSuccessNotification(
+                                orderId = realOrderId,
+                                marketTitle = marketTitle,
+                                marketId = trade.market,
+                                marketSlug = marketSlug,
+                                side = "BUY",
+                                accountName = account.accountName,
+                                walletAddress = account.walletAddress,
+                                clobApi = clobApiForQuery,
+                                apiKey = account.apiKey,
+                                apiSecret = apiSecret,
+                                apiPassphrase = apiPassphrase,
+                                walletAddressForApi = account.walletAddress,
+                                locale = locale
+                            )
+                        } catch (e: Exception) {
+                            logger.warn("发送订单成功通知失败: ${e.message}", e)
+                        }
+                    }
                 } catch (e: Exception) {
                     logger.error("处理买入交易失败: copyTradingId=${copyTrading.id}, tradeId=${trade.id}", e)
                     // 继续处理下一个跟单关系
