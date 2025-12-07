@@ -17,6 +17,52 @@
 
 ## 第一部分：产品功能说明
 
+### 📸 界面预览
+
+#### 🖥️ 桌面端
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <img src="screenshot/pc/ScreenShot_2025-12-07_172940_894.png" alt="" width="90%" />
+      </td>
+      <td align="center">
+        <img src="screenshot/pc/ScreenShot_2025-12-07_173042_509.png" alt="" width="90%" />
+      </td>
+    </tr>
+    <tr>
+      <td align="center">
+        <img src="screenshot/pc/ScreenShot_2025-12-07_173105_822.png" alt="" width="90%" />
+      </td>
+      <td align="center">
+        <img src="screenshot/pc/ScreenShot_2025-12-07_173133_527.png" alt="" width="90%" />
+      </td>
+    </tr>
+  </table>
+</div>
+
+#### 📱 移动端
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <img src="screenshot/mobile/ScreenShot_2025-12-07_173224_069.png" alt="" width="70%" />
+      </td>
+      <td align="center">
+        <img src="screenshot/mobile/ScreenShot_2025-12-07_173309_995.png" alt="" width="70%" />
+      </td>
+      <td align="center">
+        <img src="screenshot/mobile/ScreenShot_2025-12-07_173330_724.png" alt="" width="70%" />
+      </td>
+    </tr>
+    <tr>
+      <td colspan="3" align="center">
+        <img src="screenshot/mobile/ScreenShot_2025-12-07_173354_840.png" alt="" width="70%" />
+      </td>
+    </tr>
+  </table>
+</div>
+
 ### ✨ 核心功能
 
 #### 🔐 账户管理
