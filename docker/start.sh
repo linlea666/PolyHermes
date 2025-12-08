@@ -54,6 +54,7 @@ trap cleanup SIGTERM SIGINT
 
 # 启动后端服务（以 appuser 用户运行，后台运行）
 echo "启动后端服务..."
+# 自动使用系统时区
 java -jar /app/app.jar --spring.profiles.active=${SPRING_PROFILES_ACTIVE:-prod} &
 BACKEND_PID=$!
 

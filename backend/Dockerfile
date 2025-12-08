@@ -22,9 +22,9 @@ FROM eclipse-temurin:17-jre-jammy
 
 WORKDIR /app
 
-# 安装必要的工具
+# 安装必要的工具和时区数据
 RUN apt-get update && \
-    apt-get install -y curl && \
+    apt-get install -y curl tzdata && \
     rm -rf /var/lib/apt/lists/*
 
 # 从构建阶段复制 JAR 文件
@@ -43,6 +43,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD curl -f http://localhost:8000/api/system/health || exit 1
 
-# 启动应用
+# 启动应用（自动使用系统时区）
 ENTRYPOINT ["java", "-jar", "app.jar"]
 

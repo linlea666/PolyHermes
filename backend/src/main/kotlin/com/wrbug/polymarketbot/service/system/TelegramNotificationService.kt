@@ -7,6 +7,7 @@ import com.wrbug.polymarketbot.dto.NotificationConfigData
 import com.wrbug.polymarketbot.dto.TelegramConfigData
 import com.wrbug.polymarketbot.util.createClient
 import com.wrbug.polymarketbot.util.toSafeBigDecimal
+import com.wrbug.polymarketbot.util.DateUtils
 import kotlinx.coroutines.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -308,7 +309,7 @@ class TelegramNotificationService(
             }
         }
 
-        val time = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date())
+        val time = DateUtils.formatDateTime()
 
         // 转义 HTML 特殊字符
         val escapedMarketTitle = marketTitle.replace("<", "&lt;").replace(">", "&gt;")
@@ -639,7 +640,7 @@ class TelegramNotificationService(
             ""
         }
 
-        val time = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date())
+        val time = DateUtils.formatDateTime()
 
         // 转义 HTML 特殊字符
         val escapedMarketTitle = marketTitle.replace("<", "&lt;").replace(">", "&gt;")
@@ -760,7 +761,7 @@ class TelegramNotificationService(
             }
         }
 
-        val time = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date())
+        val time = DateUtils.formatDateTime()
 
         // 错误信息已经是后端返回的 msg，不需要截断（但为了安全，限制长度）
         val shortErrorMessage = if (errorMessage.length > 500) {
@@ -901,7 +902,7 @@ class TelegramNotificationService(
             }
         }
         
-        val time = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date())
+        val time = DateUtils.formatDateTime()
         
         // 转义 HTML 特殊字符
         val escapedAccountInfo = accountInfo.replace("<", "&lt;").replace(">", "&gt;")

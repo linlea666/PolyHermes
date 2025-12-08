@@ -192,7 +192,7 @@ class PositionCheckService(
     
     /**
      * 逻辑1：处理待赎回仓位
-     * 按照以下逻辑处理：
+    https://clob.polymarket.com     * 按照以下逻辑处理：
      * 1. 无待赎回仓位：跳过
      * 2. (未配置apikey || autoredeem==false) && 有待赎回的仓位：发送通知事件
      * 3. (已配置) && 有待赎回的仓位：处理订单逻辑
@@ -372,16 +372,50 @@ class PositionCheckService(
                     val position = positionsByAccountAndMarket[positionKey]?.firstOrNull()
                     
                     if (position == null) {
-                        // 仓位不存在，更新所有订单状态为已卖出
-                        val currentPrice = getCurrentMarketPrice(marketId, outcomeIndex)
-                        updateOrdersAsSold(orders, currentPrice, copyTrading.id, marketId, outcomeIndex)
+                        // 仓位不存在，检查订单创建时间
+                        // 只有当订单创建时间超过2分钟时，才认为仓位被出售了
+                        // 这样可以避免刚创建的订单因为API延迟而被误判为已卖出
+                        val now = System.currentTimeMillis()
+                        val ordersToMarkAsSold = orders.filter { order ->
+                            val orderAge = now - order.createdAt
+                            orderAge > 120000  // 2分钟 = 120000毫秒
+                        }
+                        
+                        if (ordersToMarkAsSold.isNotEmpty()) {
+                            // 有订单创建时间超过2分钟，认为仓位已被出售
+                            val currentPrice = getCurrentMarketPrice(marketId, outcomeIndex)
+                            updateOrdersAsSold(ordersToMarkAsSold, currentPrice, copyTrading.id, marketId, outcomeIndex)
+                            logger.debug("仓位不存在且订单创建时间超过2分钟，标记为已卖出: marketId=$marketId, outcomeIndex=$outcomeIndex, orderCount=${ordersToMarkAsSold.size}")
+                        } else {
+                            // 订单创建时间不足2分钟，可能是刚创建的订单，暂时不处理
+                            logger.debug("仓位不存在但订单创建时间不足2分钟，暂不标记为已卖出: marketId=$marketId, outcomeIndex=$outcomeIndex, orderCount=${orders.size}, oldestOrderAge=${orders.minOfOrNull { now - it.createdAt }?.let { "${it}ms" } ?: "N/A"}")
+                        }
                     } else {
                         // 有仓位，按订单下单顺序（FIFO）更新状态
-                        // 如果仓位数量 >= 订单数量总和，所有订单完全成交
-                        // 如果仓位数量 < 订单数量总和，按FIFO顺序部分成交
+                        // 计算逻辑：
+                        // 1. 总订单数量 = 所有未卖出订单的剩余数量总和
+                        // 2. 已成交数量 = 总订单数量 - 仓位数量（因为还有仓位，说明部分订单已卖出）
+                        // 3. 如果已成交数量 = 0，说明订单还没有卖出，不修改订单状态
+                        // 4. 如果已成交数量 > 0，按FIFO顺序匹配订单
                         val positionQuantity = position.quantity.toSafeBigDecimal()
+                        
+                        // 计算总订单数量
+                        val totalOrderQuantity = orders.fold(BigDecimal.ZERO) { sum, order ->
+                            sum.add(order.remainingQuantity.toSafeBigDecimal())
+                        }
+                        
+                        // 计算已成交数量
+                        val soldQuantity = totalOrderQuantity.subtract(positionQuantity)
+                        
+                        // 如果已成交数量 <= 0，说明订单还没有卖出，不修改订单状态
+                        if (soldQuantity <= BigDecimal.ZERO) {
+                            logger.debug("仓位数量 >= 订单数量总和，订单尚未卖出: marketId=$marketId, outcomeIndex=$outcomeIndex, positionQuantity=$positionQuantity, totalOrderQuantity=$totalOrderQuantity")
+                            continue
+                        }
+                        
+                        // 如果已成交数量 > 0，按FIFO顺序匹配订单
                         val currentPrice = getCurrentMarketPrice(marketId, outcomeIndex)
-                        updateOrdersAsSoldByFIFO(orders, positionQuantity, currentPrice,
+                        updateOrdersAsSoldByFIFO(orders, soldQuantity, currentPrice,
                             copyTrading.id, marketId, outcomeIndex)
                     }
                 }
@@ -614,12 +648,22 @@ class PositionCheckService(
     
     /**
      * 按 FIFO 顺序更新订单状态为已卖出
-     * 仓位数量小于订单数量总和时，按订单下单顺序更新
-     * 同时创建卖出记录和匹配明细，用于统计
+     * @param orders 订单列表（已按创建时间排序，FIFO）
+     * @param soldQuantity 已成交数量（总订单数量 - 仓位数量）
+     * @param sellPrice 卖出价格
+     * @param copyTradingId 跟单配置ID
+     * @param marketId 市场ID
+     * @param outcomeIndex 结果索引
+     * 
+     * 逻辑说明：
+     * 1. 按订单创建时间顺序（FIFO）处理
+     * 2. 如果订单剩余数量 <= 已成交数量，订单完全成交
+     * 3. 如果订单剩余数量 > 已成交数量，订单部分成交
+     * 4. 同时创建卖出记录和匹配明细，用于统计
      */
     private suspend fun updateOrdersAsSoldByFIFO(
         orders: List<CopyOrderTracking>,
-        availableQuantity: BigDecimal,
+        soldQuantity: BigDecimal,
         sellPrice: BigDecimal,
         copyTradingId: Long,
         marketId: String,
@@ -631,7 +675,7 @@ class PositionCheckService(
         
         try {
             // 订单已经按 createdAt ASC 排序（FIFO）
-            var remaining = availableQuantity
+            var remaining = soldQuantity
             var totalMatchedQuantity = BigDecimal.ZERO
             var totalRealizedPnl = BigDecimal.ZERO
             val matchDetails = mutableListOf<SellMatchDetail>()

@@ -1,6 +1,8 @@
 package com.wrbug.polymarketbot.util
 
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
@@ -14,6 +16,13 @@ object DateUtils {
      * ISO 8601 日期时间格式化器
      */
     private val isoFormatter = DateTimeFormatter.ISO_DATE_TIME
+    
+    /**
+     * 使用系统时区的日期时间格式化器（用于显示）
+     * 格式：yyyy-MM-dd HH:mm:ss
+     */
+    private val displayFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+        .withZone(ZoneId.systemDefault())
     
     /**
      * 将 ISO 8601 格式的日期字符串转换为时间戳（毫秒）
@@ -60,6 +69,20 @@ object DateUtils {
         } catch (e: Exception) {
             null
         }
+    }
+    
+    /**
+     * 将时间戳（毫秒）格式化为可读的日期时间字符串（使用系统时区）
+     * @param timestamp 时间戳（毫秒），如果为 null 则使用当前时间
+     * @return 格式化的日期时间字符串，格式：yyyy-MM-dd HH:mm:ss
+     */
+    fun formatDateTime(timestamp: Long? = null): String {
+        val instant = if (timestamp != null) {
+            Instant.ofEpochMilli(timestamp)
+        } else {
+            Instant.now()
+        }
+        return displayFormatter.format(instant)
     }
 }
 
