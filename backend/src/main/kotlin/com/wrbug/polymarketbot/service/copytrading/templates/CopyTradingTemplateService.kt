@@ -61,7 +61,6 @@ class CopyTradingTemplateService(
                 supportSell = request.supportSell ?: true,
                 minOrderDepth = request.minOrderDepth?.toSafeBigDecimal(),
                 maxSpread = request.maxSpread?.toSafeBigDecimal(),
-                minOrderbookDepth = request.minOrderbookDepth?.toSafeBigDecimal(),
                 minPrice = request.minPrice?.toSafeBigDecimal(),
                 maxPrice = request.maxPrice?.toSafeBigDecimal()
             )
@@ -120,7 +119,6 @@ class CopyTradingTemplateService(
                 supportSell = request.supportSell ?: template.supportSell,
                 minOrderDepth = request.minOrderDepth?.toSafeBigDecimal() ?: template.minOrderDepth,
                 maxSpread = request.maxSpread?.toSafeBigDecimal() ?: template.maxSpread,
-                minOrderbookDepth = request.minOrderbookDepth?.toSafeBigDecimal() ?: template.minOrderbookDepth,
                 minPrice = request.minPrice?.toSafeBigDecimal() ?: template.minPrice,
                 maxPrice = request.maxPrice?.toSafeBigDecimal() ?: template.maxPrice,
                 updatedAt = System.currentTimeMillis()
@@ -187,7 +185,6 @@ class CopyTradingTemplateService(
                 supportSell = request.supportSell ?: sourceTemplate.supportSell,
                 minOrderDepth = request.minOrderDepth?.toSafeBigDecimal() ?: sourceTemplate.minOrderDepth,
                 maxSpread = request.maxSpread?.toSafeBigDecimal() ?: sourceTemplate.maxSpread,
-                minOrderbookDepth = request.minOrderbookDepth?.toSafeBigDecimal() ?: sourceTemplate.minOrderbookDepth,
                 minPrice = request.minPrice?.toSafeBigDecimal() ?: sourceTemplate.minPrice,
                 maxPrice = request.maxPrice?.toSafeBigDecimal() ?: sourceTemplate.maxPrice
             )
@@ -261,7 +258,6 @@ class CopyTradingTemplateService(
             supportSell = template.supportSell,
             minOrderDepth = template.minOrderDepth?.toPlainString(),
             maxSpread = template.maxSpread?.toPlainString(),
-            minOrderbookDepth = template.minOrderbookDepth?.toPlainString(),
             minPrice = template.minPrice?.toPlainString(),
             maxPrice = template.maxPrice?.toPlainString(),
             createdAt = template.createdAt,

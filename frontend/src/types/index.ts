@@ -112,7 +112,6 @@ export interface CopyTradingTemplate {
   // 过滤条件
   minOrderDepth?: string
   maxSpread?: string
-  minOrderbookDepth?: string
   minPrice?: string  // 最低价格（可选），NULL表示不限制最低价
   maxPrice?: string  // 最高价格（可选），NULL表示不限制最高价
   createdAt: number
@@ -204,7 +203,6 @@ export interface CopyTrading {
   // 过滤条件
   minOrderDepth?: string
   maxSpread?: string
-  minOrderbookDepth?: string
   minPrice?: string  // 最低价格（可选），NULL表示不限制最低价
   maxPrice?: string  // 最高价格（可选），NULL表示不限制最高价
   // 新增配置字段
@@ -248,7 +246,6 @@ export interface CopyTradingCreateRequest {
   // 过滤条件
   minOrderDepth?: string
   maxSpread?: string
-  minOrderbookDepth?: string
   minPrice?: string  // 最低价格（可选），NULL表示不限制最低价
   maxPrice?: string  // 最高价格（可选），NULL表示不限制最高价
   // 新增配置字段
@@ -280,7 +277,6 @@ export interface CopyTradingUpdateRequest {
   // 过滤条件
   minOrderDepth?: string
   maxSpread?: string
-  minOrderbookDepth?: string
   minPrice?: string  // 最低价格（可选），NULL表示不限制最低价
   maxPrice?: string  // 最高价格（可选），NULL表示不限制最高价
   // 新增配置字段

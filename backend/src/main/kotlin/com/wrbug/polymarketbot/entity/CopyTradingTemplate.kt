@@ -66,9 +66,6 @@ data class CopyTradingTemplate(
     @Column(name = "max_spread", precision = 20, scale = 8)
     val maxSpread: BigDecimal? = null,  // 最大价差（绝对价格），NULL表示不启用
     
-    @Column(name = "min_orderbook_depth", precision = 20, scale = 8)
-    val minOrderbookDepth: BigDecimal? = null,  // 最小订单簿深度（USDC金额），NULL表示不启用
-    
     @Column(name = "min_price", precision = 20, scale = 8)
     val minPrice: BigDecimal? = null,  // 最低价格（可选），NULL表示不限制最低价
     

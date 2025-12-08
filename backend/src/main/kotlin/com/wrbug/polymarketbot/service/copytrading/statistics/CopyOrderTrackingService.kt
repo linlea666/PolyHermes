@@ -11,8 +11,10 @@ import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import com.wrbug.polymarketbot.service.copytrading.configs.CopyTradingFilterService
+import com.wrbug.polymarketbot.service.copytrading.configs.FilterStatus
 import com.wrbug.polymarketbot.service.copytrading.orders.OrderSigningService
 import com.wrbug.polymarketbot.service.common.BlockchainService
+import com.wrbug.polymarketbot.service.common.PolymarketClobService
 import com.wrbug.polymarketbot.service.system.TelegramNotificationService
 import com.wrbug.polymarketbot.util.CryptoUtils
 import org.springframework.stereotype.Service
@@ -38,6 +40,7 @@ class CopyOrderTrackingService(
     private val leaderRepository: LeaderRepository,
     private val orderSigningService: OrderSigningService,
     private val blockchainService: BlockchainService,
+    private val clobService: PolymarketClobService,
     private val retrofitFactory: RetrofitFactory,
     private val cryptoUtils: CryptoUtils,
     private val telegramNotificationService: TelegramNotificationService? = null  // 可选，避免循环依赖
@@ -215,10 +218,12 @@ class CopyOrderTrackingService(
 
                     // 过滤条件检查（在计算订单参数之前）
                     // 传入 Leader 交易价格，用于价格区间检查
+                    // 订单簿只请求一次，返回给后续逻辑使用
                     val tradePrice = trade.price.toSafeBigDecimal()
-                    val filterCheck = filterService.checkFilters(copyTrading, tokenId, isBuyOrder = true, tradePrice = tradePrice)
-                    if (!filterCheck.first) {
-                        logger.warn("过滤条件检查失败，跳过创建订单: copyTradingId=${copyTrading.id}, reason=${filterCheck.second}")
+                    val filterResult = filterService.checkFilters(copyTrading, tokenId, tradePrice = tradePrice)
+                    val orderbook = filterResult.orderbook  // 获取订单簿（如果需要）
+                    if (!filterResult.isPassed) {
+                        logger.warn("过滤条件检查失败，跳过创建订单: copyTradingId=${copyTrading.id}, reason=${filterResult.reason}")
 
                         // 记录被过滤的订单并发送通知（异步，不阻塞）
                         notificationScope.launch {
@@ -242,8 +247,8 @@ class CopyOrderTrackingService(
                                 val marketTitle = marketInfo?.question ?: trade.market
                                 val marketSlug = marketInfo?.slug
 
-                                // 从 filterReason 中提取 filterType
-                                val filterType = extractFilterType(filterCheck.second)
+                                // 从过滤结果中提取 filterType
+                                val filterType = extractFilterType(filterResult.status, filterResult.reason)
 
                                 // 计算买入数量（用于记录，即使被过滤也记录）
                                 val calculatedQuantity = try {
@@ -268,7 +273,7 @@ class CopyOrderTrackingService(
                                     price = trade.price.toSafeBigDecimal(),
                                     size = trade.size.toSafeBigDecimal(),
                                     calculatedQuantity = calculatedQuantity,
-                                    filterReason = filterCheck.second,
+                                    filterReason = filterResult.reason,
                                     filterType = filterType
                                 )
 
@@ -294,7 +299,7 @@ class CopyOrderTrackingService(
                                     outcome = trade.outcome,
                                     price = trade.price,
                                     size = trade.size,
-                                    filterReason = filterCheck.second,
+                                    filterReason = filterResult.reason,
                                     filterType = filterType,
                                     accountName = account.accountName,
                                     walletAddress = account.walletAddress,
@@ -736,8 +741,16 @@ class CopyOrderTrackingService(
         }
         val tokenId = tokenIdResult.getOrNull() ?: return
 
-        // 6. 计算卖出价格（应用价格容忍度）
-        val sellPrice = calculateAdjustedPrice(leaderSellTrade.price.toSafeBigDecimal(), copyTrading, isBuy = false)
+        // 6. 计算卖出价格（优先使用订单簿 bestBid，失败则使用 Leader 价格，固定按90%计算）
+        val leaderPrice = leaderSellTrade.price.toSafeBigDecimal()
+        val sellPrice = runCatching {
+            clobService.getOrderbookByTokenId(tokenId)
+                .getOrNull()
+                ?.let { calculateMarketSellPrice(it) }
+        }
+            .onFailure { e -> logger.warn("获取订单簿或计算 bestBid 失败，使用 Leader 价格: tokenId=$tokenId, error=${e.message}") }
+            .getOrNull()
+            ?: calculateFallbackSellPrice(leaderPrice)
 
         // 7. 解密私钥（在方法开始时解密一次，后续复用）
         val decryptedPrivateKey = decryptPrivateKey(account)
@@ -1127,19 +1140,22 @@ class CopyOrderTrackingService(
 
     /**
      * 计算调整后的价格（应用价格容忍度）
+     * 如果价格容忍度为0，使用默认值5%
      */
     private fun calculateAdjustedPrice(
         originalPrice: BigDecimal,
         copyTrading: CopyTrading,
         isBuy: Boolean
     ): BigDecimal {
-        // 如果价格容忍度为0，直接返回原价格
-        if (copyTrading.priceTolerance.eq(BigDecimal.ZERO)) {
-            return originalPrice
+        // 如果价格容忍度为0，使用默认值5%
+        val tolerance = if (copyTrading.priceTolerance.eq(BigDecimal.ZERO)) {
+            BigDecimal("5")
+        } else {
+            copyTrading.priceTolerance
         }
 
         // 计算价格调整范围（百分比）
-        val tolerancePercent = copyTrading.priceTolerance.div(100)
+        val tolerancePercent = tolerance.div(100)
         val adjustment = originalPrice.multi(tolerancePercent)
 
         return if (isBuy) {
@@ -1152,23 +1168,39 @@ class CopyOrderTrackingService(
     }
 
     /**
-     * 从过滤原因中提取过滤类型
+     * 计算市价卖出价格（使用订单簿的 bestBid，固定按90%计算）
      */
-    private fun extractFilterType(filterReason: String): String {
-        return when {
-            filterReason.contains("价格低于最低限制", ignoreCase = true) || filterReason.contains("价格高于最高限制", ignoreCase = true) -> "PRICE_RANGE"
-            filterReason.contains("订单深度不足", ignoreCase = true) -> "ORDER_DEPTH"
-            filterReason.contains("价差过大", ignoreCase = true) -> "SPREAD"
-            filterReason.contains("订单簿深度不足", ignoreCase = true) -> "ORDERBOOK_DEPTH"
-            filterReason.contains("价格", ignoreCase = true) && filterReason.contains(
-                "合理",
-                ignoreCase = true
-            ) -> "PRICE_VALIDITY"
+    private fun calculateMarketSellPrice(
+        orderbook: com.wrbug.polymarketbot.api.OrderbookResponse
+    ): BigDecimal {
+        // 获取 bestBid（最高买入价）
+        val bestBid = orderbook.bids
+            .mapNotNull { it.price.toSafeBigDecimal() }
+            .maxOrNull()
+            ?: throw IllegalStateException("订单簿 bids 为空，无法获取 bestBid")
 
-            filterReason.contains("市场状态", ignoreCase = true) -> "MARKET_STATUS"
-            filterReason.contains("获取订单簿失败", ignoreCase = true) -> "ORDERBOOK_ERROR"
-            filterReason.contains("订单簿为空", ignoreCase = true) -> "ORDERBOOK_EMPTY"
-            else -> "UNKNOWN"
+        // 卖出：bestBid * 0.9（固定按90%计算，确保能立即成交）
+        return calculateFallbackSellPrice(bestBid)
+    }
+
+    /**
+     * 计算降级卖出价格（固定按90%计算）
+     */
+    private fun calculateFallbackSellPrice(price: BigDecimal): BigDecimal {
+        return price.multi(BigDecimal("0.9")).coerceAtLeast(BigDecimal("0.01"))
+    }
+
+    /**
+     * 从过滤结果中提取过滤类型
+     */
+    private fun extractFilterType(status: FilterStatus, reason: String): String {
+        return when (status) {
+            FilterStatus.PASSED -> "PASSED"
+            FilterStatus.FAILED_PRICE_RANGE -> "PRICE_RANGE"
+            FilterStatus.FAILED_ORDERBOOK_ERROR -> "ORDERBOOK_ERROR"
+            FilterStatus.FAILED_ORDERBOOK_EMPTY -> "ORDERBOOK_EMPTY"
+            FilterStatus.FAILED_SPREAD -> "SPREAD"
+            FilterStatus.FAILED_ORDER_DEPTH -> "ORDER_DEPTH"
         }
     }
 

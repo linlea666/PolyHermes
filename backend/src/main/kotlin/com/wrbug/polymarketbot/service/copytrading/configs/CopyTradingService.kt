@@ -85,7 +85,6 @@ class CopyTradingService(
                     supportSell = request.supportSell ?: template.supportSell,
                     minOrderDepth = request.minOrderDepth?.toSafeBigDecimal() ?: template.minOrderDepth,
                     maxSpread = request.maxSpread?.toSafeBigDecimal() ?: template.maxSpread,
-                    minOrderbookDepth = request.minOrderbookDepth?.toSafeBigDecimal() ?: template.minOrderbookDepth,
                     minPrice = request.minPrice?.toSafeBigDecimal() ?: template.minPrice,
                     maxPrice = request.maxPrice?.toSafeBigDecimal() ?: template.maxPrice
                 )
@@ -112,7 +111,6 @@ class CopyTradingService(
                     supportSell = request.supportSell ?: true,
                     minOrderDepth = request.minOrderDepth?.toSafeBigDecimal(),
                     maxSpread = request.maxSpread?.toSafeBigDecimal(),
-                    minOrderbookDepth = request.minOrderbookDepth?.toSafeBigDecimal(),
                     minPrice = request.minPrice?.toSafeBigDecimal(),
                     maxPrice = request.maxPrice?.toSafeBigDecimal()
                 )
@@ -139,7 +137,6 @@ class CopyTradingService(
                 supportSell = config.supportSell,
                 minOrderDepth = config.minOrderDepth,
                 maxSpread = config.maxSpread,
-                minOrderbookDepth = config.minOrderbookDepth,
                 minPrice = config.minPrice,
                 maxPrice = config.maxPrice,
                 configName = configName,
@@ -205,7 +202,6 @@ class CopyTradingService(
                 supportSell = request.supportSell ?: copyTrading.supportSell,
                 minOrderDepth = request.minOrderDepth?.toSafeBigDecimal() ?: copyTrading.minOrderDepth,
                 maxSpread = request.maxSpread?.toSafeBigDecimal() ?: copyTrading.maxSpread,
-                minOrderbookDepth = request.minOrderbookDepth?.toSafeBigDecimal() ?: copyTrading.minOrderbookDepth,
                 minPrice = request.minPrice?.toSafeBigDecimal() ?: copyTrading.minPrice,
                 maxPrice = request.maxPrice?.toSafeBigDecimal() ?: copyTrading.maxPrice,
                 configName = configName,
@@ -411,7 +407,6 @@ class CopyTradingService(
             supportSell = copyTrading.supportSell,
             minOrderDepth = copyTrading.minOrderDepth?.toPlainString(),
             maxSpread = copyTrading.maxSpread?.toPlainString(),
-            minOrderbookDepth = copyTrading.minOrderbookDepth?.toPlainString(),
             minPrice = copyTrading.minPrice?.toPlainString(),
             maxPrice = copyTrading.maxPrice?.toPlainString(),
             configName = copyTrading.configName,
@@ -441,7 +436,6 @@ class CopyTradingService(
         val supportSell: Boolean,
         val minOrderDepth: BigDecimal?,
         val maxSpread: BigDecimal?,
-        val minOrderbookDepth: BigDecimal?,
         val minPrice: BigDecimal?,
         val maxPrice: BigDecimal?
     )

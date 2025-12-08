@@ -56,7 +56,6 @@ const CopyTradingEdit: React.FC = () => {
             supportSell: found.supportSell,
             minOrderDepth: found.minOrderDepth ? parseFloat(found.minOrderDepth) : undefined,
             maxSpread: found.maxSpread ? parseFloat(found.maxSpread) : undefined,
-            minOrderbookDepth: found.minOrderbookDepth ? parseFloat(found.minOrderbookDepth) : undefined,
             minPrice: found.minPrice ? parseFloat(found.minPrice) : undefined,
             maxPrice: found.maxPrice ? parseFloat(found.maxPrice) : undefined,
             configName: found.configName || '',
@@ -122,7 +121,6 @@ const CopyTradingEdit: React.FC = () => {
         supportSell: values.supportSell,
         minOrderDepth: values.minOrderDepth?.toString(),
         maxSpread: values.maxSpread?.toString(),
-        minOrderbookDepth: values.minOrderbookDepth?.toString(),
         minPrice: values.minPrice?.toString(),
         maxPrice: values.maxPrice?.toString(),
         configName: values.configName?.trim() || undefined,
@@ -381,7 +379,7 @@ const CopyTradingEdit: React.FC = () => {
           <Form.Item
             label={t('copyTradingEdit.minOrderDepth') || '最小订单深度 (USDC)'}
             name="minOrderDepth"
-            tooltip={t('copyTradingEdit.minOrderDepthTooltip') || '最小订单深度（USDC金额），NULL表示不启用此过滤'}
+            tooltip={t('copyTradingEdit.minOrderDepthTooltip') || '检查订单簿的总订单金额（买盘+卖盘），确保市场有足够的流动性。不填写则不启用此过滤'}
           >
             <InputNumber
               min={0}
@@ -395,7 +393,7 @@ const CopyTradingEdit: React.FC = () => {
           <Form.Item
             label={t('copyTradingEdit.maxSpread') || '最大价差（绝对价格）'}
             name="maxSpread"
-            tooltip={t('copyTradingEdit.maxSpreadTooltip') || '最大价差（绝对价格），NULL表示不启用此过滤'}
+            tooltip={t('copyTradingEdit.maxSpreadTooltip') || '最大价差（绝对价格）。避免在价差过大的市场跟单。不填写则不启用此过滤'}
           >
             <InputNumber
               min={0}
@@ -403,20 +401,6 @@ const CopyTradingEdit: React.FC = () => {
               precision={4}
               style={{ width: '100%' }}
               placeholder={t('copyTradingEdit.maxSpreadPlaceholder') || '例如：0.05（5美分，可选，不填写表示不启用）'}
-            />
-          </Form.Item>
-          
-          <Form.Item
-            label={t('copyTradingEdit.minOrderbookDepth') || '最小订单簿深度 (USDC)'}
-            name="minOrderbookDepth"
-            tooltip={t('copyTradingEdit.minOrderbookDepthTooltip') || '最小订单簿深度（USDC金额），NULL表示不启用此过滤'}
-          >
-            <InputNumber
-              min={0}
-              step={0.0001}
-              precision={4}
-              style={{ width: '100%' }}
-              placeholder={t('copyTradingEdit.minOrderbookDepthPlaceholder') || '例如：50（可选，不填写表示不启用）'}
             />
           </Form.Item>
           
