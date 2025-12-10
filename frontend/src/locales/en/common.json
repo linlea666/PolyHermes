@@ -856,6 +856,8 @@
   "copyTradingList": {
     "title": "Copy Trading Config Management",
     "addCopyTrading": "Add Copy Trading",
+    "configName": "Config Name",
+    "configNameNotProvided": "Not Provided",
     "wallet": "Wallet",
     "account": "Account",
     "template": "Template",

@@ -122,7 +122,7 @@ docker pull wrbug/polyhermes:v1.0.1
 请通过以下**唯一官方渠道**获取 PolyHermes：
 
 * **GitHub 仓库**：https://github.com/WrBug/PolyHermes
-* **Twitter**：@quant_tr
+* **Twitter**：@polyhermes
 * **Telegram 群组**：加入群组
 
 ---

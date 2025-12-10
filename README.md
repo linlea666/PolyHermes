@@ -1,7 +1,7 @@
 # PolyHermes
 
 [![GitHub](https://img.shields.io/badge/GitHub-WrBug%2FPolyHermes-blue?logo=github)](https://github.com/WrBug/PolyHermes)
-[![Twitter](https://img.shields.io/badge/Twitter-@quant__tr-blue?logo=twitter)](https://x.com/quant_tr)
+[![Twitter](https://img.shields.io/badge/Twitter-@polyhermes-blue?logo=twitter)](https://x.com/polyhermes)
 
 > 🌐 **Language**: [English](README_EN.md) | 中文
 
@@ -414,7 +414,7 @@ cd frontend
 ## 🔗 相关链接
 
 - [GitHub 仓库](https://github.com/WrBug/PolyHermes)
-- [Twitter](https://x.com/quant_tr)
+- [Twitter](https://x.com/polyhermes)
 - [Polymarket 官网](https://polymarket.com)
 - [Polymarket API 文档](https://docs.polymarket.com)
 

@@ -648,5 +648,5 @@ Vite uses `.env.production` file to inject environment variables during build. T
 
 ## Technical Support
 
-If you have any questions, please submit an Issue to [GitHub](https://github.com/WrBug/PolyHermes) or contact [Twitter](https://x.com/quant_tr).
+If you have any questions, please submit an Issue to [GitHub](https://github.com/WrBug/PolyHermes) or contact [Twitter](https://x.com/polyhermes).
 

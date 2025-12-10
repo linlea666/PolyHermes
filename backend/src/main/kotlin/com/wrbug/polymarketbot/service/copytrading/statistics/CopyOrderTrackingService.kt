@@ -10,6 +10,8 @@ import com.wrbug.polymarketbot.util.*
 import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.dao.DuplicateKeyException
+import java.sql.SQLException
 import com.wrbug.polymarketbot.service.copytrading.configs.CopyTradingFilterService
 import com.wrbug.polymarketbot.service.copytrading.configs.FilterStatus
 import com.wrbug.polymarketbot.service.copytrading.orders.OrderSigningService
@@ -27,7 +29,7 @@ import java.math.BigDecimal
  * 实际创建订单并记录跟踪信息
  */
 @Service
-class CopyOrderTrackingService(
+open class CopyOrderTrackingService(
     private val copyOrderTrackingRepository: CopyOrderTrackingRepository,
     private val sellMatchRecordRepository: SellMatchRecordRepository,
     private val sellMatchDetailRepository: SellMatchDetailRepository,
@@ -50,6 +52,12 @@ class CopyOrderTrackingService(
 
     // 协程作用域（用于异步发送通知）
     private val notificationScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    
+    // 订单创建重试配置
+    companion object {
+        private const val MAX_RETRY_ATTEMPTS = 2  // 最多重试次数（首次 + 1次重试）
+        private const val RETRY_DELAY_MS = 3000L  // 重试前等待时间（毫秒，3秒）
+    }
 
     /**
      * 解密账户私钥
@@ -144,21 +152,38 @@ class CopyOrderTrackingService(
                     processedAt = System.currentTimeMillis()
                 )
                 processedTradeRepository.save(processed)
-            } catch (e: DataIntegrityViolationException) {
-                // 唯一约束冲突，说明已经处理过了（可能是并发请求）
-                // 再次检查确认状态
-                val existing = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
-                if (existing != null) {
-                    if (existing.status == "FAILED") {
+            } catch (e: Exception) {
+                // 检查是否是唯一键冲突异常（可能是 DataIntegrityViolationException、DuplicateKeyException 或 SQLException）
+                if (isUniqueConstraintViolation(e)) {
+                    // 唯一约束冲突，说明已经处理过了（可能是并发请求）
+                    // 再次检查确认状态
+                    val existing = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
+                    if (existing != null) {
+                        if (existing.status == "FAILED") {
+                            logger.debug("交易已标记为失败，跳过处理: leaderId=$leaderId, tradeId=${trade.id}")
+                            return Result.success(Unit)
+                        }
+                        logger.debug("交易已处理（并发检测）: leaderId=$leaderId, tradeId=${trade.id}, status=${existing.status}")
+                        return Result.success(Unit)
+                    } else {
+                        // 如果检查不到，可能是事务隔离级别问题，等待一下再查询
+                        delay(100)
+                        val existingAfterDelay =
+                            processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
+                        if (existingAfterDelay != null) {
+                            logger.debug("延迟查询到记录（并发检测）: leaderId=$leaderId, tradeId=${trade.id}, status=${existingAfterDelay.status}")
+                            return Result.success(Unit)
+                        }
+                        // 如果还是查询不到，记录警告但不抛出异常（可能是其他约束冲突）
+                        logger.warn(
+                            "保存ProcessedTrade时发生唯一约束冲突，但查询不到记录: leaderId=$leaderId, tradeId=${trade.id}",
+                            e
+                        )
+                        // 不抛出异常，避免影响其他交易的处理
                         return Result.success(Unit)
                     }
-                    return Result.success(Unit)
                 } else {
-                    // 如果检查不到，说明可能是其他约束冲突，重新抛出异常
-                    logger.warn(
-                        "保存ProcessedTrade时发生唯一约束冲突，但查询不到记录: leaderId=$leaderId, tradeId=${trade.id}",
-                        e
-                    )
+                    // 其他类型的异常，重新抛出
                     throw e
                 }
             }
@@ -358,6 +383,35 @@ class CopyOrderTrackingService(
                     // 计算价格（应用价格容忍度）
                     val buyPrice = calculateAdjustedPrice(trade.price.toSafeBigDecimal(), copyTrading, isBuy = true)
 
+                    // 在创建订单前，检查订单簿中是否有可匹配的订单（避免 FAK 订单失败）
+                    // 如果过滤检查时已经获取了订单簿，直接使用；否则重新获取
+                    val orderbookForCheck = orderbook ?: run {
+                        val orderbookResult = clobService.getOrderbookByTokenId(tokenId)
+                        if (orderbookResult.isSuccess) {
+                            orderbookResult.getOrNull()
+                        } else {
+                            null
+                        }
+                    }
+                    
+                    // 检查是否有可匹配的卖单（asks）
+                    if (orderbookForCheck != null) {
+                        val bestAsk = orderbookForCheck.asks
+                            .mapNotNull { it.price.toSafeBigDecimal() }
+                            .minOrNull()
+                        
+                        if (bestAsk == null) {
+                            logger.warn("订单簿中没有卖单，跳过创建订单: copyTradingId=${copyTrading.id}, tradeId=${trade.id}")
+                            continue
+                        }
+                        
+                        // 如果调整后的买入价格低于最佳卖单价格，无法匹配
+                        if (buyPrice.lt(bestAsk)) {
+                            logger.warn("调整后的买入价格 ($buyPrice) 低于最佳卖单价格 ($bestAsk)，无法匹配，跳过创建订单: copyTradingId=${copyTrading.id}, tradeId=${trade.id}, leaderPrice=${trade.price}, tolerance=${copyTrading.priceTolerance}")
+                            continue
+                        }
+                    }
+
                     // 解密 API 凭证
                     val apiSecret = try {
                         decryptApiSecret(account)
@@ -383,7 +437,9 @@ class CopyOrderTrackingService(
                     // 解密私钥
                     val decryptedPrivateKey = decryptPrivateKey(account)
 
-                    // 调用API创建订单（带重试机制，重试时会重新生成salt并重新签名）
+                    // 调用API创建订单（带重试机制）
+                    // 重试策略：最多重试 MAX_RETRY_ATTEMPTS 次，每次重试前等待 RETRY_DELAY_MS 毫秒
+                    // 每次重试都会重新生成salt并重新签名，确保签名唯一性
                     val createOrderResult = createOrderWithRetry(
                         clobApi = clobApi,
                         privateKey = decryptedPrivateKey,
@@ -397,8 +453,9 @@ class CopyOrderTrackingService(
                         tradeId = trade.id
                     )
 
+                    // 处理订单创建失败
                     if (createOrderResult.isFailure) {
-                        // 创建订单失败，记录到失败表
+                        // 提取错误信息（只保留 code 和 errorBody）
                         val exception = createOrderResult.exceptionOrNull()
                         val errorMsg = buildFullErrorMessage(
                             exception,
@@ -407,16 +464,19 @@ class CopyOrderTrackingService(
                             finalBuyQuantity.toString(),
                             trade.id
                         )
+                        
+                        // 记录失败交易到数据库
+                        // retryCount = MAX_RETRY_ATTEMPTS - 1，表示已重试的次数
                         recordFailedTrade(
                             leaderId = leaderId,
                             trade = trade,
                             copyTradingId = copyTrading.id!!,
                             accountId = copyTrading.accountId,
-                            side = "BUY",  // 订单方向是BUY
+                            side = "BUY",
                             price = buyPrice.toString(),
                             size = finalBuyQuantity.toString(),
                             errorMessage = errorMsg,
-                            retryCount = 1  // 已重试一次
+                            retryCount = MAX_RETRY_ATTEMPTS - 1  // 已重试次数
                         )
 
                         // 发送订单失败通知（异步，不阻塞，仅在 pushFailedOrders 为 true 时发送）
@@ -427,7 +487,8 @@ class CopyOrderTrackingService(
                                     val marketInfo = withContext(Dispatchers.IO) {
                                         try {
                                             val gammaApi = retrofitFactory.createGammaApi()
-                                            val marketResponse = gammaApi.listMarkets(conditionIds = listOf(trade.market))
+                                            val marketResponse =
+                                                gammaApi.listMarkets(conditionIds = listOf(trade.market))
                                             if (marketResponse.isSuccessful && marketResponse.body() != null) {
                                                 marketResponse.body()!!.firstOrNull()
                                             } else {
@@ -544,7 +605,7 @@ class CopyOrderTrackingService(
                             } catch (e: Exception) {
                                 java.util.Locale("zh", "CN")  // 默认简体中文
                             }
-                            
+
                             // 获取 Leader 和跟单配置信息
                             val leader = leaderRepository.findById(copyTrading.leaderId).orElse(null)
                             val leaderName = leader?.leaderName
@@ -648,8 +709,8 @@ class CopyOrderTrackingService(
      * 卖出订单匹配
      * 统一按比例计算，不区分RATIO或FIXED模式
      * 实际创建卖出订单并记录匹配关系
+     * 注意：此方法在 @Transactional 方法中被调用，会自动继承事务
      */
-    @Transactional
     private suspend fun matchSellOrder(
         copyTrading: CopyTrading,
         leaderSellTrade: TradeResponse
@@ -872,8 +933,23 @@ class CopyOrderTrackingService(
 
     /**
      * 创建订单（带重试机制）
-     * 失败后重试一次，如果仍然失败则返回失败结果
-     * 注意：重试时会重新生成salt并重新签名，确保每次重试都是新的订单
+     * 
+     * 重试策略：
+     * - 最多重试 MAX_RETRY_ATTEMPTS 次（首次尝试 + 重试）
+     * - 每次重试前等待 RETRY_DELAY_MS 毫秒
+     * - 每次重试都重新生成salt并重新签名，确保签名唯一性
+     * 
+     * @param clobApi CLOB API 客户端
+     * @param privateKey 私钥（用于签名）
+     * @param makerAddress 代理钱包地址
+     * @param tokenId Token ID
+     * @param side 订单方向（BUY/SELL）
+     * @param price 价格
+     * @param size 数量
+     * @param owner API Key（用于owner字段）
+     * @param copyTradingId 跟单配置ID（用于日志）
+     * @param tradeId Leader 交易ID（用于日志）
+     * @return 成功返回订单ID，失败返回异常
      */
     private suspend fun createOrderWithRetry(
         clobApi: PolymarketClobApi,
@@ -883,16 +959,16 @@ class CopyOrderTrackingService(
         side: String,
         price: String,
         size: String,
-        owner: String,  // API Key，用于owner字段
+        owner: String,
         copyTradingId: Long,
         tradeId: String
     ): Result<String> {
         var lastError: Exception? = null
 
-        // 最多重试2次（首次 + 1次重试）
-        for (attempt in 1..2) {
+        // 重试循环：最多重试 MAX_RETRY_ATTEMPTS 次
+        for (attempt in 1..MAX_RETRY_ATTEMPTS) {
             try {
-                // 每次重试都重新生成salt并重新签名
+                // 每次重试都重新生成salt并重新签名，确保签名唯一性
                 val signedOrder = orderSigningService.createAndSignOrder(
                     privateKey = privateKey,
                     makerAddress = makerAddress,
@@ -906,76 +982,118 @@ class CopyOrderTrackingService(
                     expiration = "0"
                 )
 
-                // 构建订单请求（每次重试都使用新签名的订单）
+                // 构建订单请求
                 // 跟单订单使用 FAK (Fill-And-Kill)，允许部分成交，未成交部分立即取消
                 // 这样可以快速响应 Leader 的交易，避免订单长期挂单导致价格不匹配
                 val orderRequest = NewOrderRequest(
                     order = signedOrder,
-                    owner = owner,  // API Key
+                    owner = owner,
                     orderType = "FAK",  // Fill-And-Kill
                     deferExec = false
                 )
 
+                // 调用 API 创建订单
                 val orderResponse = clobApi.createOrder(orderRequest)
 
+                // 检查 HTTP 响应状态
                 if (!orderResponse.isSuccessful || orderResponse.body() == null) {
                     val errorBody = try {
                         orderResponse.errorBody()?.string()
                     } catch (e: Exception) {
                         null
                     }
-                    val errorMsg =
-                        "创建订单失败: copyTradingId=$copyTradingId, tradeId=$tradeId, attempt=$attempt, side=$side, price=$price, size=$size, tokenId=$tokenId, code=${orderResponse.code()}, message=${orderResponse.message()}${if (errorBody != null) ", errorBody=$errorBody" else ""}"
+                    val errorMsg = "code=${orderResponse.code()}, errorBody=${errorBody ?: "null"}"
                     lastError = Exception(errorMsg)
-                    // 所有失败都记录详细日志
-                    logger.error(errorMsg)
-                    if (attempt < 2) {
-                        delay(1000)  // 重试前等待1秒
+                    
+                    // 记录错误日志
+                    logger.error("创建订单失败 (尝试 $attempt/$MAX_RETRY_ATTEMPTS): copyTradingId=$copyTradingId, tradeId=$tradeId, $errorMsg")
+                    
+                    // 如果不是最后一次尝试，等待后重试
+                    if (attempt < MAX_RETRY_ATTEMPTS) {
+                        delay(RETRY_DELAY_MS)
                         continue
                     }
                     return Result.failure(lastError)
                 }
 
+                // 检查业务响应状态
                 val response = orderResponse.body()!!
                 if (!response.success || response.orderId == null) {
-                    val errorMsg =
-                        "创建订单失败: copyTradingId=$copyTradingId, tradeId=$tradeId, attempt=$attempt, side=$side, price=$price, size=$size, tokenId=$tokenId, errorMsg=${response.errorMsg}"
+                    val errorMsg = "errorMsg=${response.errorMsg}"
                     lastError = Exception(errorMsg)
-                    // 所有失败都记录详细日志
-                    logger.error(errorMsg)
-                    if (attempt < 2) {
-                        delay(1000)  // 重试前等待1秒
+                    
+                    // 记录错误日志
+                    logger.error("创建订单失败 (尝试 $attempt/$MAX_RETRY_ATTEMPTS): copyTradingId=$copyTradingId, tradeId=$tradeId, $errorMsg")
+                    
+                    // 如果不是最后一次尝试，等待后重试
+                    if (attempt < MAX_RETRY_ATTEMPTS) {
+                        delay(RETRY_DELAY_MS)
                         continue
                     }
                     return Result.failure(lastError)
                 }
 
-                // 成功
+                // 创建订单成功
+                logger.info("创建订单成功: copyTradingId=$copyTradingId, tradeId=$tradeId, orderId=${response.orderId}, attempt=$attempt")
                 return Result.success(response.orderId)
+                
             } catch (e: Exception) {
-                val errorMsg =
-                    "调用创建订单API异常: copyTradingId=$copyTradingId, tradeId=$tradeId, attempt=$attempt, side=$side, price=$price, size=$size, tokenId=$tokenId, error=${e.message}"
+                val errorMsg = "error=${e.message}"
                 lastError = Exception(errorMsg, e)
-                // 所有失败都记录详细日志（包括堆栈）
-                logger.error(errorMsg, e)
-                if (attempt < 2) {
-                    delay(1000)  // 重试前等待1秒
+                
+                // 记录错误日志（包含堆栈）
+                logger.error("创建订单异常 (尝试 $attempt/$MAX_RETRY_ATTEMPTS): copyTradingId=$copyTradingId, tradeId=$tradeId, $errorMsg", e)
+                
+                // 如果不是最后一次尝试，等待后重试
+                if (attempt < MAX_RETRY_ATTEMPTS) {
+                    delay(RETRY_DELAY_MS)
                     continue
                 }
                 return Result.failure(lastError)
             }
         }
 
-        val finalError = lastError ?: Exception("创建订单失败：未知错误")
-        logger.error(
-            "创建订单失败（所有重试都失败）: copyTradingId=$copyTradingId, tradeId=$tradeId, side=$side, price=$price, size=$size, tokenId=$tokenId",
-            finalError
-        )
+        // 所有重试都失败
+        val finalError = lastError ?: Exception("error=未知错误")
+        logger.error("创建订单失败（所有重试都失败）: copyTradingId=$copyTradingId, tradeId=$tradeId, side=$side, price=$price, size=$size", finalError)
         return Result.failure(finalError)
     }
 
     /**
-     * 构建完整的错误信息（包括堆栈）
+     * 检查是否是唯一键冲突异常
+     */
+    private fun isUniqueConstraintViolation(e: Exception): Boolean {
+        // 检查是否是 DataIntegrityViolationException 或 DuplicateKeyException
+        if (e is DataIntegrityViolationException || e is DuplicateKeyException) {
+            return true
+        }
+
+        // 检查是否是 SQLException（MySQL 错误码 1062 表示重复键）
+        var cause: Throwable? = e.cause
+        while (cause != null) {
+            if (cause is SQLException) {
+                val sqlException = cause as SQLException
+                // MySQL 错误码 1062 表示重复键（Duplicate entry）
+                if (sqlException.errorCode == 1062 || sqlException.sqlState == "23000") {
+                    return true
+                }
+            }
+            // 检查异常消息中是否包含唯一键冲突的关键字
+            val message = cause.message ?: ""
+            if (message.contains("Duplicate entry") ||
+                message.contains("uk_leader_trade") ||
+                message.contains("UNIQUE constraint")
+            ) {
+                return true
+            }
+            cause = cause.cause
+        }
+
+        return false
+    }
+
+    /**
+     * 构建简化的错误信息（只保留 code 和 errorBody）
      */
     private fun buildFullErrorMessage(
         exception: Throwable?,
@@ -985,35 +1103,29 @@ class CopyOrderTrackingService(
         tradeId: String
     ): String {
         if (exception == null) {
-            return "创建订单失败: side=$side, price=$price, size=$size, tradeId=$tradeId, 未知错误"
+            return "code=未知, errorBody=null"
         }
 
-        val errorMsg = StringBuilder()
-        errorMsg.append("创建订单失败: side=$side, price=$price, size=$size, tradeId=$tradeId")
-        errorMsg.append(", error=${exception.message}")
+        val exceptionMessage = exception.message ?: ""
 
-        // 添加堆栈信息（限制长度，避免过长）
-        val stackTrace = exception.stackTraceToString()
-        val maxLength = 2000  // 限制错误信息最大长度为2000字符
-        if (stackTrace.length > maxLength) {
-            errorMsg.append(", stackTrace=${stackTrace.substring(0, maxLength)}...")
-        } else {
-            errorMsg.append(", stackTrace=$stackTrace")
-        }
+        // 从错误信息中提取 code 和 errorBody
+        val codePattern = Regex("code=([^,}]+)")
+        val errorBodyPattern = Regex("errorBody=([^,}]+)")
 
-        // 如果有 cause，也添加
-        exception.cause?.let { cause ->
-            errorMsg.append(", cause=${cause.message}")
-        }
+        val codeMatch = codePattern.find(exceptionMessage)
+        val errorBodyMatch = errorBodyPattern.find(exceptionMessage)
 
-        return errorMsg.toString()
+        val code = codeMatch?.groupValues?.get(1)?.trim() ?: "未知"
+        val errorBody = errorBodyMatch?.groupValues?.get(1)?.trim() ?: "null"
+
+        return "code=$code, errorBody=$errorBody"
     }
 
     /**
      * 记录失败交易到数据库
+     * 注意：此方法在 @Transactional 方法中被调用，会自动继承事务
      */
-    @Transactional
-    private fun recordFailedTrade(
+    private suspend fun recordFailedTrade(
         leaderId: Long,
         trade: TradeResponse,
         copyTradingId: Long,
@@ -1064,21 +1176,35 @@ class CopyOrderTrackingService(
                     processedAt = System.currentTimeMillis()
                 )
                 processedTradeRepository.save(processed)
-            } catch (e: DataIntegrityViolationException) {
-                // 唯一约束冲突，说明已经处理过了（可能是并发请求）
-                // 检查现有记录的状态
-                val existing = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
-                if (existing != null) {
-                    if (existing.status == "SUCCESS") {
-                        logger.warn("交易已成功处理，但尝试记录为失败（并发冲突）: leaderId=$leaderId, tradeId=${trade.id}")
+            } catch (e: Exception) {
+                // 检查是否是唯一键冲突异常
+                if (isUniqueConstraintViolation(e)) {
+                    // 唯一约束冲突，说明已经处理过了（可能是并发请求）
+                    // 检查现有记录的状态
+                    val existing = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
+                    if (existing != null) {
+                        if (existing.status == "SUCCESS") {
+                            logger.warn("交易已成功处理，但尝试记录为失败（并发冲突）: leaderId=$leaderId, tradeId=${trade.id}")
+                        } else {
+                            logger.debug("交易已标记为失败（并发检测）: leaderId=$leaderId, tradeId=${trade.id}")
+                        }
                     } else {
-                        logger.debug("交易已标记为失败（并发检测）: leaderId=$leaderId, tradeId=${trade.id}")
+                        // 如果查询不到，等待一下再查询（可能是事务隔离级别问题）
+                        delay(100)
+                        val existingAfterDelay =
+                            processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
+                        if (existingAfterDelay != null) {
+                            logger.debug("延迟查询到记录（并发检测）: leaderId=$leaderId, tradeId=${trade.id}, status=${existingAfterDelay.status}")
+                        } else {
+                            logger.warn(
+                                "保存ProcessedTrade失败记录时发生唯一约束冲突，但查询不到记录: leaderId=$leaderId, tradeId=${trade.id}",
+                                e
+                            )
+                        }
                     }
                 } else {
-                    logger.warn(
-                        "保存ProcessedTrade失败记录时发生唯一约束冲突，但查询不到记录: leaderId=$leaderId, tradeId=${trade.id}",
-                        e
-                    )
+                    // 其他类型的异常，记录但不抛出（避免影响其他交易的处理）
+                    logger.warn("保存ProcessedTrade失败记录时发生异常: leaderId=$leaderId, tradeId=${trade.id}", e)
                 }
             }
 

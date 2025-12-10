@@ -68,14 +68,6 @@ const LeaderList: React.FC = () => {
       )
     },
     {
-      title: t('leaderList.category') || '分类',
-      dataIndex: 'category',
-      key: 'category',
-      render: (category: string | undefined) => category ? (
-        <Tag color={category === 'sports' ? 'blue' : 'green'}>{category}</Tag>
-      ) : <Tag>{t('leaderList.all') || '全部'}</Tag>
-    },
-    {
       title: t('leaderList.remark') || '备注',
       dataIndex: 'remark',
       key: 'remark',
@@ -252,18 +244,9 @@ const LeaderList: React.FC = () => {
                       
                       <Divider style={{ margin: '12px 0' }} />
                       
-                      {/* 分类和跟单关系数 */}
+                      {/* 跟单关系数 */}
                       <div style={{ marginBottom: '12px' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                          {leader.category ? (
-                            <Tag color={leader.category === 'sports' ? 'blue' : 'green'}>
-                              {leader.category}
-                            </Tag>
-                          ) : (
-                            <Tag>{t('leaderList.all') || '全部'}</Tag>
-                          )}
-                          <Tag>{t('leaderList.copyTradingRelations', { count: leader.copyTradingCount }) || `${leader.copyTradingCount} 个跟单关系`}</Tag>
-                        </div>
+                        <Tag>{t('leaderList.copyTradingRelations', { count: leader.copyTradingCount }) || `${leader.copyTradingCount} 个跟单关系`}</Tag>
                       </div>
                       
                       {/* 创建时间 */}

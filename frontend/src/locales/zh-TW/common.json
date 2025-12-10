@@ -856,6 +856,8 @@
   "copyTradingList": {
     "title": "跟單配置管理",
     "addCopyTrading": "新增跟單",
+    "configName": "配置名",
+    "configNameNotProvided": "未提供",
     "wallet": "錢包",
     "account": "賬戶",
     "template": "模板",

@@ -648,5 +648,5 @@ Vite 使用 `.env.production` 文件在构建时注入环境变量。构建脚�
 
 ## 技术支持
 
-如有问题，请提交 Issue 到 [GitHub](https://github.com/WrBug/PolyHermes) 或联系 [Twitter](https://x.com/quant_tr)。
+如有问题，请提交 Issue 到 [GitHub](https://github.com/WrBug/PolyHermes) 或联系 [Twitter](https://x.com/polyhermes)。
 

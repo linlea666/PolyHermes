@@ -238,7 +238,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <GithubOutlined />
             </a>
             <a
-              href="https://x.com/quant_tr"
+              href="https://x.com/polyhermes"
               target="_blank"
               rel="noopener noreferrer"
               style={{ color: '#fff', fontSize: '16px', display: 'flex', alignItems: 'center' }}
@@ -362,7 +362,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <GithubOutlined />
             </a>
             <a
-              href="https://x.com/quant_tr"
+              href="https://x.com/polyhermes"
               target="_blank"
               rel="noopener noreferrer"
               style={{ color: '#fff', fontSize: '18px', display: 'flex', alignItems: 'center' }}

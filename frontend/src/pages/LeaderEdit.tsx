@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Card, Form, Input, Button, Select, message, Typography, Space, Spin } from 'antd'
+import { Card, Form, Input, Button, message, Typography, Space, Spin } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import { apiService } from '../services/api'
 import { useMediaQuery } from 'react-responsive'
@@ -8,7 +8,6 @@ import { useTranslation } from 'react-i18next'
 import type { Leader } from '../types'
 
 const { Title } = Typography
-const { Option } = Select
 
 const LeaderEdit: React.FC = () => {
   const { t } = useTranslation()
@@ -38,8 +37,7 @@ const LeaderEdit: React.FC = () => {
         form.setFieldsValue({
           leaderName: leader.leaderName || '',
           remark: leader.remark || '',
-          website: leader.website || '',
-          category: leader.category || undefined
+          website: leader.website || ''
         })
       } else {
         message.error(response.data.msg || t('leaderEdit.fetchFailed') || '获取 Leader 详情失败')
@@ -65,8 +63,7 @@ const LeaderEdit: React.FC = () => {
         leaderId: parseInt(leaderId),
         leaderName: values.leaderName?.trim() || undefined,
         remark: values.remark?.trim() || undefined,
-        website: values.website?.trim() || undefined,
-        category: values.category || undefined
+        website: values.website?.trim() || undefined
       })
       
       if (response.data.code === 0) {
@@ -143,17 +140,6 @@ const LeaderEdit: React.FC = () => {
             ]}
           >
             <Input placeholder={t('leaderEdit.websitePlaceholder') || '可选，例如：https://example.com'} />
-          </Form.Item>
-          
-          <Form.Item
-            label={t('leaderEdit.category') || '分类筛选'}
-            name="category"
-            tooltip={t('leaderEdit.categoryTooltip') || '仅跟单该分类的交易，不选择则跟单所有分类（sports 或 crypto）'}
-          >
-            <Select placeholder={t('leaderEdit.categoryPlaceholder') || '选择分类（可选）'} allowClear>
-              <Option value="sports">Sports</Option>
-              <Option value="crypto">Crypto</Option>
-            </Select>
           </Form.Item>
           
           <Form.Item>
