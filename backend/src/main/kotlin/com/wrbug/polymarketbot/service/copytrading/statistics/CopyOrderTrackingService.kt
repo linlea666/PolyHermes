@@ -241,11 +241,30 @@ open class CopyOrderTrackingService(
                     }
                     val tokenId = tokenIdResult.getOrNull() ?: continue
 
+                    // 先计算跟单金额（用于仓位检查）
+                    // 注意：这里先计算金额，即使后续被过滤也会记录
+                    val tradePrice = trade.price.toSafeBigDecimal()
+                    val buyQuantity = try {
+                        calculateBuyQuantity(trade, copyTrading)
+                    } catch (e: Exception) {
+                        logger.warn("计算买入数量失败: ${e.message}", e)
+                        continue
+                    }
+                    
+                    // 计算跟单金额（USDC）= 买入数量 × 价格
+                    val copyOrderAmount = buyQuantity.multi(tradePrice)
+
                     // 过滤条件检查（在计算订单参数之前）
                     // 传入 Leader 交易价格，用于价格区间检查
+                    // 传入跟单金额和市场ID，用于仓位检查（按市场检查仓位）
                     // 订单簿只请求一次，返回给后续逻辑使用
-                    val tradePrice = trade.price.toSafeBigDecimal()
-                    val filterResult = filterService.checkFilters(copyTrading, tokenId, tradePrice = tradePrice)
+                    val filterResult = filterService.checkFilters(
+                        copyTrading, 
+                        tokenId, 
+                        tradePrice = tradePrice,
+                        copyOrderAmount = copyOrderAmount,
+                        marketId = trade.market
+                    )
                     val orderbook = filterResult.orderbook  // 获取订单簿（如果需要）
                     if (!filterResult.isPassed) {
                         logger.warn("过滤条件检查失败，跳过创建订单: copyTradingId=${copyTrading.id}, reason=${filterResult.reason}")
@@ -338,9 +357,8 @@ open class CopyOrderTrackingService(
                         continue
                     }
 
-                    // 计算买入数量
-                    val buyQuantity = calculateBuyQuantity(trade, copyTrading)
-
+                    // 买入数量已在过滤检查前计算，这里直接使用
+                    // 如果数量为0或负数，跳过
                     if (buyQuantity.lte(BigDecimal.ZERO)) {
                         logger.warn("计算出的买入数量为0或负数，跳过: copyTradingId=${copyTrading.id}, tradeId=${trade.id}")
                         continue
@@ -1328,6 +1346,8 @@ open class CopyOrderTrackingService(
             FilterStatus.FAILED_ORDERBOOK_EMPTY -> "ORDERBOOK_EMPTY"
             FilterStatus.FAILED_SPREAD -> "SPREAD"
             FilterStatus.FAILED_ORDER_DEPTH -> "ORDER_DEPTH"
+            FilterStatus.FAILED_MAX_POSITION_VALUE -> "MAX_POSITION_VALUE"
+            FilterStatus.FAILED_MAX_POSITION_COUNT -> "MAX_POSITION_COUNT"
         }
     }
 

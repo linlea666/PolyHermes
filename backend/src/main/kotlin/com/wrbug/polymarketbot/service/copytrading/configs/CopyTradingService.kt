@@ -86,7 +86,9 @@ class CopyTradingService(
                     minOrderDepth = request.minOrderDepth?.toSafeBigDecimal() ?: template.minOrderDepth,
                     maxSpread = request.maxSpread?.toSafeBigDecimal() ?: template.maxSpread,
                     minPrice = request.minPrice?.toSafeBigDecimal() ?: template.minPrice,
-                    maxPrice = request.maxPrice?.toSafeBigDecimal() ?: template.maxPrice
+                    maxPrice = request.maxPrice?.toSafeBigDecimal() ?: template.maxPrice,
+                    maxPositionValue = request.maxPositionValue?.toSafeBigDecimal(),
+                    maxPositionCount = request.maxPositionCount
                 )
             } else {
                 // 手动输入（所有字段必须提供）
@@ -112,7 +114,9 @@ class CopyTradingService(
                     minOrderDepth = request.minOrderDepth?.toSafeBigDecimal(),
                     maxSpread = request.maxSpread?.toSafeBigDecimal(),
                     minPrice = request.minPrice?.toSafeBigDecimal(),
-                    maxPrice = request.maxPrice?.toSafeBigDecimal()
+                    maxPrice = request.maxPrice?.toSafeBigDecimal(),
+                    maxPositionValue = request.maxPositionValue?.toSafeBigDecimal(),
+                    maxPositionCount = request.maxPositionCount
                 )
             }
             
@@ -139,6 +143,8 @@ class CopyTradingService(
                 maxSpread = config.maxSpread,
                 minPrice = config.minPrice,
                 maxPrice = config.maxPrice,
+                maxPositionValue = config.maxPositionValue,
+                maxPositionCount = config.maxPositionCount,
                 configName = configName,
                 pushFailedOrders = request.pushFailedOrders ?: false
             )
@@ -204,6 +210,8 @@ class CopyTradingService(
                 maxSpread = request.maxSpread?.toSafeBigDecimal() ?: copyTrading.maxSpread,
                 minPrice = request.minPrice?.toSafeBigDecimal() ?: copyTrading.minPrice,
                 maxPrice = request.maxPrice?.toSafeBigDecimal() ?: copyTrading.maxPrice,
+                maxPositionValue = request.maxPositionValue?.toSafeBigDecimal() ?: copyTrading.maxPositionValue,
+                maxPositionCount = request.maxPositionCount ?: copyTrading.maxPositionCount,
                 configName = configName,
                 pushFailedOrders = request.pushFailedOrders ?: copyTrading.pushFailedOrders,
                 updatedAt = System.currentTimeMillis()
@@ -409,6 +417,8 @@ class CopyTradingService(
             maxSpread = copyTrading.maxSpread?.toPlainString(),
             minPrice = copyTrading.minPrice?.toPlainString(),
             maxPrice = copyTrading.maxPrice?.toPlainString(),
+            maxPositionValue = copyTrading.maxPositionValue?.toPlainString(),
+            maxPositionCount = copyTrading.maxPositionCount,
             configName = copyTrading.configName,
             pushFailedOrders = copyTrading.pushFailedOrders,
             createdAt = copyTrading.createdAt,
@@ -437,6 +447,8 @@ class CopyTradingService(
         val minOrderDepth: BigDecimal?,
         val maxSpread: BigDecimal?,
         val minPrice: BigDecimal?,
-        val maxPrice: BigDecimal?
+        val maxPrice: BigDecimal?,
+        val maxPositionValue: BigDecimal?,
+        val maxPositionCount: Int?
     )
 }

@@ -205,6 +205,9 @@ export interface CopyTrading {
   maxSpread?: string
   minPrice?: string  // 最低价格（可选），NULL表示不限制最低价
   maxPrice?: string  // 最高价格（可选），NULL表示不限制最高价
+  // 最大仓位配置
+  maxPositionValue?: string  // 最大仓位金额（USDC），NULL表示不启用
+  maxPositionCount?: number  // 最大仓位数量，NULL表示不启用
   // 新增配置字段
   configName?: string  // 配置名（可选，但提供时必须非空）
   pushFailedOrders: boolean  // 推送失败订单（默认关闭）
@@ -248,6 +251,9 @@ export interface CopyTradingCreateRequest {
   maxSpread?: string
   minPrice?: string  // 最低价格（可选），NULL表示不限制最低价
   maxPrice?: string  // 最高价格（可选），NULL表示不限制最高价
+  // 最大仓位配置
+  maxPositionValue?: string  // 最大仓位金额（USDC），NULL表示不启用
+  maxPositionCount?: number  // 最大仓位数量，NULL表示不启用
   // 新增配置字段
   configName?: string  // 配置名（可选，但提供时必须非空）
   pushFailedOrders?: boolean  // 推送失败订单（可选）
@@ -279,6 +285,9 @@ export interface CopyTradingUpdateRequest {
   maxSpread?: string
   minPrice?: string  // 最低价格（可选），NULL表示不限制最低价
   maxPrice?: string  // 最高价格（可选），NULL表示不限制最高价
+  // 最大仓位配置
+  maxPositionValue?: string  // 最大仓位金额（USDC），NULL表示不启用
+  maxPositionCount?: number  // 最大仓位数量，NULL表示不启用
   // 新增配置字段
   configName?: string  // 配置名（可选，但提供时必须非空）
   pushFailedOrders?: boolean  // 推送失败订单（可选）

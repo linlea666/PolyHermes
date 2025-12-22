@@ -65,7 +65,8 @@
     "updateSuccess": "Account updated successfully",
     "updateFailed": "Failed to update account",
     "getDetailFailed": "Failed to get account details",
-    "accountIdRequired": "Account ID cannot be empty"
+    "accountIdRequired": "Account ID cannot be empty",
+    "proxyAddress": "Proxy Wallet Address"
   },
   "message": {
     "success": "Operation successful",
@@ -426,6 +427,7 @@
   },
   "leaderAdd": {
     "title": "Add Leader",
+    "back": "Back",
     "leaderAddress": "Leader Wallet Address",
     "leaderAddressRequired": "Please enter Leader wallet address",
     "leaderAddressInvalid": "Invalid wallet address format (must be a 42-character address starting with 0x)",
@@ -667,6 +669,13 @@
     "priceRangeTooltip": "Only copy orders where Leader's trade price is within the specified range. Leave empty to disable. Examples: Fill 0.11 and 0.89 means only copy orders with price between 0.11 and 0.89; Fill only max price 0.89 means only copy orders with price below 0.89; Fill only min price 0.11 means only copy orders with price above 0.11.",
     "minPricePlaceholder": "Min Price (leave empty for no limit)",
     "maxPricePlaceholder": "Max Price (leave empty for no limit)",
+    "positionLimitFilter": "Max Position Limit",
+    "maxPositionValue": "Max Position Value (USDC)",
+    "maxPositionValueTooltip": "Limit the maximum position value for a single market. If the current position value + copy order amount exceeds this limit, the order will not be placed. Leave empty to disable",
+    "maxPositionValuePlaceholder": "For example: 100 (optional, leave empty to disable)",
+    "maxPositionCount": "Max Position Count",
+    "maxPositionCountTooltip": "Limit the maximum position count for a single market. If the current position count reaches or exceeds this limit, the order will not be placed. Leave empty to disable",
+    "maxPositionCountPlaceholder": "For example: 10 (optional, leave empty to disable)",
     "supportSell": "Support Sell",
     "supportSellTooltip": "Whether to copy Leader's sell orders. Enabled: copy both Leader's buy and sell orders; Disabled: only copy Leader's buy orders, ignore sell orders.",
     "invalidNumber": "Please enter a valid number"
@@ -732,6 +741,13 @@
     "priceRangeTooltip": "Only copy orders where Leader's trade price is within the specified range. Leave empty to disable. Examples: Fill 0.11 and 0.89 means only copy orders with price between 0.11 and 0.89; Fill only max price 0.89 means only copy orders with price below 0.89; Fill only min price 0.11 means only copy orders with price above 0.11.",
     "minPricePlaceholder": "Min Price (leave empty for no limit)",
     "maxPricePlaceholder": "Max Price (leave empty for no limit)",
+    "positionLimitFilter": "Max Position Limit",
+    "maxPositionValue": "Max Position Value (USDC)",
+    "maxPositionValueTooltip": "Limit the maximum position value for a single market. If the current position value + copy order amount exceeds this limit, the order will not be placed. Leave empty to disable",
+    "maxPositionValuePlaceholder": "For example: 100 (optional, leave empty to disable)",
+    "maxPositionCount": "Max Position Count",
+    "maxPositionCountTooltip": "Limit the maximum position count for a single market. If the current position count reaches or exceeds this limit, the order will not be placed. Leave empty to disable",
+    "maxPositionCountPlaceholder": "For example: 10 (optional, leave empty to disable)",
     "configName": "Configuration Name",
     "configNameRequired": "Please enter configuration name",
     "configNamePlaceholder": "e.g., Copy Trading Config 1",
@@ -752,7 +768,11 @@
     "invalidNumber": "Please enter a valid number",
     "fetchLeaderFailed": "Failed to get Leader list",
     "fetchTemplateFailed": "Failed to get template list",
-    "templateName": "Template Name"
+    "templateName": "Template Name",
+    "noAccounts": "No accounts",
+    "importAccount": "Import Account",
+    "noLeaders": "No Leaders",
+    "addLeader": "Add Leader"
   },
   "copyTradingEdit": {
     "title": "Edit Copy Trading Config",
@@ -807,6 +827,13 @@
     "priceRangeTooltip": "Only copy orders where Leader's trade price is within the specified range. Leave empty to disable. Examples: Fill 0.11 and 0.89 means only copy orders with price between 0.11 and 0.89; Fill only max price 0.89 means only copy orders with price below 0.89; Fill only min price 0.11 means only copy orders with price above 0.11.",
     "minPricePlaceholder": "Min Price (leave empty for no limit)",
     "maxPricePlaceholder": "Max Price (leave empty for no limit)",
+    "positionLimitFilter": "Max Position Limit",
+    "maxPositionValue": "Max Position Value (USDC)",
+    "maxPositionValueTooltip": "Limit the maximum position value for a single market. If the current position value + copy order amount exceeds this limit, the order will not be placed. Leave empty to disable",
+    "maxPositionValuePlaceholder": "For example: 100 (optional, leave empty to disable)",
+    "maxPositionCount": "Max Position Count",
+    "maxPositionCountTooltip": "Limit the maximum position count for a single market. If the current position count reaches or exceeds this limit, the order will not be placed. Leave empty to disable",
+    "maxPositionCountPlaceholder": "For example: 10 (optional, leave empty to disable)",
     "configName": "Configuration Name",
     "configNameRequired": "Please enter configuration name",
     "configNamePlaceholder": "e.g., Copy Trading Config 1",
@@ -849,6 +876,8 @@
       "orderbookError": "Orderbook Fetch Failed",
       "orderbookEmpty": "Orderbook Empty",
       "priceRange": "Price Range Mismatch",
+      "maxPositionValue": "Exceeds Max Position Value",
+      "maxPositionCount": "Exceeds Max Position Count",
       "unknown": "Unknown Reason"
     },
     "noData": "No filtered orders"
