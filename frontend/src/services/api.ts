@@ -618,6 +618,33 @@ export const apiService = {
   /**
    * 公告 API
    */
+  /**
+   * RPC 节点配置 API
+   */
+  rpcNodes: {
+    list: () =>
+      apiClient.post<ApiResponse<import('../types').RpcNodeConfig[]>>('/system/rpc-nodes/list', {}),
+    
+    add: (data: import('../types').RpcNodeAddRequest) =>
+      apiClient.post<ApiResponse<import('../types').RpcNodeConfig>>('/system/rpc-nodes/add', data),
+    
+    update: (data: import('../types').RpcNodeUpdateRequest) =>
+      apiClient.post<ApiResponse<import('../types').RpcNodeConfig>>('/system/rpc-nodes/update', data),
+    
+    delete: (data: { id: number }) =>
+      apiClient.post<ApiResponse<void>>('/system/rpc-nodes/delete', data),
+    
+    updatePriority: (data: { id: number; priority: number }) =>
+      apiClient.post<ApiResponse<void>>('/system/rpc-nodes/update-priority', data),
+    
+    checkHealth: (data: { id?: number }) =>
+      apiClient.post<ApiResponse<any>>('/system/rpc-nodes/check-health', data),
+    
+    validate: (data: import('../types').RpcNodeAddRequest) =>
+      apiClient.post<ApiResponse<{ valid: boolean; message: string; responseTimeMs?: number }>>('/system/rpc-nodes/validate', data)
+  },
+  
+
   announcements: {
     /**
      * 获取公告列表（最近10条）

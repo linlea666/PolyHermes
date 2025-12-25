@@ -24,12 +24,11 @@ import java.math.BigInteger
  */
 @Service
 class RelayClientService(
-    @Value("\${polygon.rpc.url:}")
-    private val polygonRpcUrl: String,
     @Value("\${polymarket.builder.relayer-url:}")
     private val builderRelayerUrl: String,
     private val retrofitFactory: RetrofitFactory,
-    private val systemConfigService: SystemConfigService
+    private val systemConfigService: SystemConfigService,
+    private val rpcNodeService: RpcNodeService
 ) {
 
     private val logger = LoggerFactory.getLogger(RelayClientService::class.java)
@@ -43,12 +42,9 @@ class RelayClientService(
     // 空集合ID
     private val EMPTY_SET = "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-    private val polygonRpcApi: EthereumRpcApi? by lazy {
-        if (polygonRpcUrl.isBlank()) {
-            null
-        } else {
-            retrofitFactory.createEthereumRpcApi(polygonRpcUrl)
-        }
+    private val polygonRpcApi: EthereumRpcApi by lazy {
+        val rpcUrl = rpcNodeService.getHttpUrl()
+        retrofitFactory.createEthereumRpcApi(rpcUrl)
     }
 
     /**
@@ -260,7 +256,7 @@ class RelayClientService(
         builderSecret: String,
         builderPassphrase: String
     ): Result<String> {
-        val rpcApi = polygonRpcApi ?: throw IllegalStateException("Polygon RPC URL 未配置")
+        val rpcApi = polygonRpcApi
         val relayerApi = retrofitFactory.createBuilderRelayerApi(
             relayerUrl = builderRelayerUrl,
             apiKey = builderApiKey,
@@ -461,13 +457,7 @@ class RelayClientService(
         safeTx: SafeTransaction
     ): Result<String> {
         return try {
-            // 如果未配置 RPC URL，返回错误
-            if (polygonRpcUrl.isBlank()) {
-                logger.warn("未配置 Polygon RPC URL，无法执行交易")
-                return Result.failure(IllegalStateException("未配置 Polygon RPC URL，无法执行交易。请配置 polygon.rpc.url 或启用 Builder Relayer（Gasless）"))
-            }
-
-            val rpcApi = polygonRpcApi ?: throw IllegalStateException("Polygon RPC URL 未配置")
+            val rpcApi = polygonRpcApi
 
             // 从私钥推导实际签名地址（交易真正的 from 地址）
             val cleanPrivateKey = privateKey.removePrefix("0x")

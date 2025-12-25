@@ -19,7 +19,7 @@ import {
   TwitterOutlined,
   CheckCircleOutlined,
   SendOutlined,
-  NotificationOutlined
+  ApiOutlined,  NotificationOutlined
 } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
 import type { ReactNode } from 'react'
@@ -130,6 +130,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           key: '/system-settings',
           icon: <SettingOutlined />,
           label: t('menu.systemOverview') || '通用设置'
+        },
+        {
+          key: '/system-settings/rpc-nodes',
+          icon: <ApiOutlined />,
+          label: t('menu.rpcNodes') || 'RPC节点管理'
         },
         {
           key: '/system-settings/api-health',

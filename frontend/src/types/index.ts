@@ -806,3 +806,54 @@ export interface NotificationConfigUpdateRequest {
   }
 }
 
+
+/**
+ * RPC 节点配置类型
+ */
+export interface RpcNodeConfig {
+  id: number
+  providerType: 'ALCHEMY' | 'INFURA' | 'QUICKNODE' | 'CHAINSTACK' | 'GETBLOCK' | 'CUSTOM' | 'PUBLIC'
+  name: string
+  httpUrl: string
+  wsUrl?: string
+  apiKeyMasked?: string  // 脱敏后的 API Key
+  enabled: boolean
+  priority: number
+  lastCheckTime?: number
+  lastCheckStatus?: 'HEALTHY' | 'UNHEALTHY' | 'UNKNOWN'
+  responseTimeMs?: number
+  createdAt: number
+  updatedAt: number
+}
+
+/**
+ * 添加 RPC 节点请求
+ */
+export interface RpcNodeAddRequest {
+  providerType: string
+  name: string
+  apiKey?: string  // 主流服务商需要
+  httpUrl?: string  // CUSTOM 需要
+  wsUrl?: string
+}
+
+/**
+ * 更新 RPC 节点请求
+ */
+export interface RpcNodeUpdateRequest {
+  id: number
+  name?: string
+  enabled?: boolean
+  priority?: number
+}
+
+/**
+ * 节点健康检查结果
+ */
+export interface NodeCheckResult {
+  status: 'HEALTHY' | 'UNHEALTHY' | 'UNKNOWN'
+  message: string
+  checkTime: number
+  responseTimeMs?: number
+  blockNumber?: string
+}

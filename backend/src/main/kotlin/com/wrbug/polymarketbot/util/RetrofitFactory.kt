@@ -8,9 +8,16 @@ import com.wrbug.polymarketbot.api.GitHubApi
 import com.wrbug.polymarketbot.api.PolymarketClobApi
 import com.wrbug.polymarketbot.api.PolymarketDataApi
 import com.wrbug.polymarketbot.api.PolymarketGammaApi
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okio.Buffer
+import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -95,11 +102,32 @@ class RetrofitFactory(
     
     /**
      * 创建 Ethereum RPC API 客户端
+     * 使用固定的 baseUrl，通过拦截器动态替换为实际的 RPC URL
+     * 如果 RPC 不可用，将抛出异常
      * @param rpcUrl RPC 节点 URL
      * @return EthereumRpcApi 客户端
+     * @throws IllegalArgumentException 如果 RPC URL 无效或不可用
      */
     fun createEthereumRpcApi(rpcUrl: String): EthereumRpcApi {
-        val okHttpClient = createClient().build()
+        // 使用固定的 baseUrl（Retrofit 要求 baseUrl 必须以 / 结尾）
+        val fixedBaseUrl = "https://polyrpc.polyhermes/"
+        
+        // 确保实际的 RPC URL 以 / 结尾
+        val actualRpcUrl = if (rpcUrl.endsWith("/")) {
+            rpcUrl
+        } else {
+            "$rpcUrl/"
+        }
+        
+        // 验证 RPC 是否可用
+        validateRpcAvailability(actualRpcUrl)
+        
+        // 创建 URL 替换拦截器
+        val urlReplaceInterceptor = RpcUrlReplaceInterceptor(fixedBaseUrl, actualRpcUrl)
+        
+        val okHttpClient = createClient()
+            .addInterceptor(urlReplaceInterceptor)
+            .build()
         
         // 创建 lenient 模式的 Gson
         val gson = GsonBuilder()
@@ -107,11 +135,84 @@ class RetrofitFactory(
             .create()
         
         return Retrofit.Builder()
-            .baseUrl(rpcUrl)
+            .baseUrl(fixedBaseUrl)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(EthereumRpcApi::class.java)
+    }
+    
+    /**
+     * 验证 RPC 节点是否可用
+     * 通过发送一个简单的 eth_blockNumber 请求来验证
+     * @param rpcUrl RPC 节点 URL
+     * @throws IllegalArgumentException 如果 RPC 不可用
+     */
+    private fun validateRpcAvailability(rpcUrl: String) {
+        val logger = LoggerFactory.getLogger(RetrofitFactory::class.java)
+        
+        try {
+            // 解析 URL
+            val httpUrl = rpcUrl.toHttpUrlOrNull()
+                ?: throw IllegalArgumentException("无效的 RPC URL: $rpcUrl")
+            
+            // 创建 JSON-RPC 请求体
+            val jsonRpcRequest = """
+                {
+                    "jsonrpc": "2.0",
+                    "method": "eth_blockNumber",
+                    "params": [],
+                    "id": 1
+                }
+            """.trimIndent()
+            
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val requestBody = jsonRpcRequest.toRequestBody(mediaType)
+            
+            // 创建请求
+            val request = Request.Builder()
+                .url(httpUrl)
+                .post(requestBody)
+                .header("Content-Type", "application/json")
+                .build()
+            
+            // 创建临时客户端用于验证（使用较短的超时时间）
+            val testClient = createClient()
+                .connectTimeout(5, TimeUnit.SECONDS)
+                .readTimeout(5, TimeUnit.SECONDS)
+                .writeTimeout(5, TimeUnit.SECONDS)
+                .build()
+            
+            // 发送请求
+            val response = testClient.newCall(request).execute()
+            
+            if (!response.isSuccessful) {
+                throw IllegalArgumentException("RPC 节点不可用: HTTP ${response.code} ${response.message}")
+            }
+            
+            val responseBody = response.body?.string()
+            if (responseBody.isNullOrBlank()) {
+                throw IllegalArgumentException("RPC 节点响应为空")
+            }
+            
+            // 检查响应是否包含错误
+            if (responseBody.contains("\"error\"")) {
+                throw IllegalArgumentException("RPC 节点返回错误: $responseBody")
+            }
+            
+            // 检查响应是否包含 result
+            if (!responseBody.contains("\"result\"")) {
+                throw IllegalArgumentException("RPC 节点响应格式错误: $responseBody")
+            }
+            
+            logger.debug("RPC 节点验证成功: $rpcUrl")
+        } catch (e: IllegalArgumentException) {
+            logger.error("RPC 节点验证失败: $rpcUrl - ${e.message}")
+            throw e
+        } catch (e: Exception) {
+            logger.error("RPC 节点验证失败: $rpcUrl - ${e.message}", e)
+            throw IllegalArgumentException("RPC 节点不可用: ${e.message}", e)
+        }
     }
     
     /**
@@ -236,6 +337,39 @@ class RetrofitFactory(
             .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(GitHubApi::class.java)
+    }
+}
+
+/**
+ * RPC URL 替换拦截器
+ * 用于将固定的 baseUrl 替换为实际的 RPC URL
+ */
+class RpcUrlReplaceInterceptor(
+    private val fixedBaseUrl: String,
+    private val actualRpcUrl: String
+) : Interceptor {
+    private val logger = LoggerFactory.getLogger(RpcUrlReplaceInterceptor::class.java)
+    
+    @Throws(IOException::class)
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val originalRequest = chain.request()
+        val originalUrl = originalRequest.url
+        
+        // 将固定 baseUrl 替换为实际的 RPC URL
+        val originalUrlString = originalUrl.toString()
+        val newUrlString = originalUrlString.replace(fixedBaseUrl, actualRpcUrl)
+        
+        // 使用 HttpUrl 解析新 URL，确保格式正确
+        val newUrl = newUrlString.toHttpUrlOrNull()
+            ?: throw IllegalArgumentException("无效的 RPC URL: $newUrlString")
+        
+        logger.debug("RPC URL 替换: $originalUrlString -> $newUrlString")
+        
+        val newRequest = originalRequest.newBuilder()
+            .url(newUrl)
+            .build()
+        
+        return chain.proceed(newRequest)
     }
 }
 
