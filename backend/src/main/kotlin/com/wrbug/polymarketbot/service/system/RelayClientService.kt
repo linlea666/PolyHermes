@@ -655,7 +655,7 @@ class RelayClientService(
         }
 
         val hexNonce = rpcResponse.result ?: return Result.failure(Exception("Proxy nonce 结果为空"))
-        val nonce = EthereumUtils.decodeUint256(hexNonce)
+        val nonce = EthereumUtils.decodeUint256(hexNonce.asString)
         return Result.success(nonce)
     }
 
@@ -679,7 +679,7 @@ class RelayClientService(
         }
 
         val hexNonce = rpcResponse.result ?: return Result.failure(Exception("nonce 结果为空"))
-        val nonce = EthereumUtils.decodeUint256(hexNonce)
+        val nonce = EthereumUtils.decodeUint256(hexNonce.asString)
         return Result.success(nonce)
     }
 
@@ -703,7 +703,7 @@ class RelayClientService(
         }
 
         val hexGasPrice = rpcResponse.result ?: return Result.failure(Exception("gas price 结果为空"))
-        val gasPrice = EthereumUtils.decodeUint256(hexGasPrice)
+        val gasPrice = EthereumUtils.decodeUint256(hexGasPrice.asString)
         return Result.success(gasPrice)
     }
 
@@ -774,7 +774,7 @@ class RelayClientService(
         }
 
         val txHash = rpcResponse.result ?: return Result.failure(Exception("交易哈希为空"))
-        return Result.success(txHash)
+        return Result.success(txHash.asString)
     }
 
     /**

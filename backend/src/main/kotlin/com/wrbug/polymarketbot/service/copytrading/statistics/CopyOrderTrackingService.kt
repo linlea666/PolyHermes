@@ -8,10 +8,13 @@ import com.wrbug.polymarketbot.repository.*
 import com.wrbug.polymarketbot.util.RetrofitFactory
 import com.wrbug.polymarketbot.util.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.dao.DuplicateKeyException
 import java.sql.SQLException
+import java.util.concurrent.ConcurrentHashMap
 import com.wrbug.polymarketbot.service.copytrading.configs.CopyTradingFilterService
 import com.wrbug.polymarketbot.service.copytrading.configs.FilterStatus
 import com.wrbug.polymarketbot.service.copytrading.orders.OrderSigningService
@@ -53,10 +56,21 @@ open class CopyOrderTrackingService(
     // 协程作用域（用于异步发送通知）
     private val notificationScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
+    // 使用 Mutex 保证线程安全（按交易ID锁定）
+    private val tradeMutexMap = ConcurrentHashMap<String, Mutex>()
+    
     // 订单创建重试配置
     companion object {
         private const val MAX_RETRY_ATTEMPTS = 2  // 最多重试次数（首次 + 1次重试）
         private const val RETRY_DELAY_MS = 3000L  // 重试前等待时间（毫秒，3秒）
+    }
+    
+    /**
+     * 获取或创建 Mutex（按交易ID）
+     */
+    private fun getMutex(leaderId: Long, tradeId: String): Mutex {
+        val key = "${leaderId}_${tradeId}"
+        return tradeMutexMap.getOrPut(key) { Mutex() }
     }
 
     /**
@@ -102,96 +116,98 @@ open class CopyOrderTrackingService(
     /**
      * 处理交易事件（WebSocket 或轮询）
      * 根据交易方向调用相应的处理方法
+     * 使用 Mutex 保证线程安全（单实例部署）
      */
     @Transactional
     suspend fun processTrade(leaderId: Long, trade: TradeResponse, source: String): Result<Unit> {
-        return try {
-            // 1. 检查是否已处理（去重，包括失败状态）
-            val existingProcessed = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
-
-            if (existingProcessed != null) {
-                if (existingProcessed.status == "FAILED") {
-                    return Result.success(Unit)
-                }
-                return Result.success(Unit)
-            }
-
-            // 检查是否已记录为失败交易
-            val failedTrade = failedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
-            if (failedTrade != null) {
-                return Result.success(Unit)
-            }
-
-            // 2. 处理交易逻辑
-            val result = when (trade.side.uppercase()) {
-                "BUY" -> processBuyTrade(leaderId, trade)
-                "SELL" -> processSellTrade(leaderId, trade)
-                else -> {
-                    logger.warn("未知的交易方向: ${trade.side}")
-                    Result.failure(IllegalArgumentException("未知的交易方向: ${trade.side}"))
-                }
-            }
-
-            if (result.isFailure) {
-                logger.error(
-                    "处理交易失败: leaderId=$leaderId, tradeId=${trade.id}, side=${trade.side}",
-                    result.exceptionOrNull()
-                )
-                return result
-            }
-
-            // 3. 标记为已处理（成功状态）
-            // 注意：并发情况下可能多个请求同时处理同一笔交易，需要处理唯一约束冲突
+        // 获取该交易的 Mutex（按交易ID锁定，不同交易可以并行处理）
+        val mutex = getMutex(leaderId, trade.id)
+        
+        return mutex.withLock {
             try {
-                val processed = ProcessedTrade(
-                    leaderId = leaderId,
-                    leaderTradeId = trade.id,
-                    tradeType = trade.side.uppercase(),
-                    source = source,
-                    status = "SUCCESS",
-                    processedAt = System.currentTimeMillis()
-                )
-                processedTradeRepository.save(processed)
-            } catch (e: Exception) {
-                // 检查是否是唯一键冲突异常（可能是 DataIntegrityViolationException、DuplicateKeyException 或 SQLException）
-                if (isUniqueConstraintViolation(e)) {
-                    // 唯一约束冲突，说明已经处理过了（可能是并发请求）
-                    // 再次检查确认状态
-                    val existing = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
-                    if (existing != null) {
-                        if (existing.status == "FAILED") {
-                            logger.debug("交易已标记为失败，跳过处理: leaderId=$leaderId, tradeId=${trade.id}")
-                            return Result.success(Unit)
-                        }
-                        logger.debug("交易已处理（并发检测）: leaderId=$leaderId, tradeId=${trade.id}, status=${existing.status}")
-                        return Result.success(Unit)
-                    } else {
-                        // 如果检查不到，可能是事务隔离级别问题，等待一下再查询
-                        delay(100)
-                        val existingAfterDelay =
-                            processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
-                        if (existingAfterDelay != null) {
-                            logger.debug("延迟查询到记录（并发检测）: leaderId=$leaderId, tradeId=${trade.id}, status=${existingAfterDelay.status}")
-                            return Result.success(Unit)
-                        }
-                        // 如果还是查询不到，记录警告但不抛出异常（可能是其他约束冲突）
-                        logger.warn(
-                            "保存ProcessedTrade时发生唯一约束冲突，但查询不到记录: leaderId=$leaderId, tradeId=${trade.id}",
-                            e
-                        )
-                        // 不抛出异常，避免影响其他交易的处理
-                        return Result.success(Unit)
-                    }
-                } else {
-                    // 其他类型的异常，重新抛出
-                    throw e
-                }
-            }
+                // 1. 检查是否已处理（去重，包括失败状态）
+                val existingProcessed = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
 
-            Result.success(Unit)
-        } catch (e: Exception) {
-            logger.error("处理交易异常: leaderId=$leaderId, tradeId=${trade.id}", e)
-            Result.failure(e)
+                if (existingProcessed != null) {
+                    if (existingProcessed.status == "FAILED") {
+                        return@withLock Result.success(Unit)
+                    }
+                    return@withLock Result.success(Unit)
+                }
+
+                // 检查是否已记录为失败交易
+                val failedTrade = failedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
+                if (failedTrade != null) {
+                    return@withLock Result.success(Unit)
+                }
+
+                // 2. 处理交易逻辑
+                val result = when (trade.side.uppercase()) {
+                    "BUY" -> processBuyTrade(leaderId, trade)
+                    "SELL" -> processSellTrade(leaderId, trade)
+                    else -> {
+                        logger.warn("未知的交易方向: ${trade.side}")
+                        Result.failure(IllegalArgumentException("未知的交易方向: ${trade.side}"))
+                    }
+                }
+
+                if (result.isFailure) {
+                    logger.error(
+                        "处理交易失败: leaderId=$leaderId, tradeId=${trade.id}, side=${trade.side}",
+                        result.exceptionOrNull()
+                    )
+                    return@withLock result
+                }
+
+                // 3. 标记为已处理（成功状态）
+                // 由于使用了 Mutex，这里理论上不会出现并发冲突，但保留异常处理作为兜底
+                try {
+                    val processed = ProcessedTrade(
+                        leaderId = leaderId,
+                        leaderTradeId = trade.id,
+                        tradeType = trade.side.uppercase(),
+                        source = source,
+                        status = "SUCCESS",
+                        processedAt = System.currentTimeMillis()
+                    )
+                    processedTradeRepository.save(processed)
+                } catch (e: Exception) {
+                    // 检查是否是唯一键冲突异常（理论上不会发生，但保留作为兜底）
+                    if (isUniqueConstraintViolation(e)) {
+                        val existing = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
+                        if (existing != null) {
+                            if (existing.status == "FAILED") {
+                                logger.debug("交易已标记为失败，跳过处理: leaderId=$leaderId, tradeId=${trade.id}")
+                                return@withLock Result.success(Unit)
+                            }
+                            logger.debug("交易已处理（并发检测）: leaderId=$leaderId, tradeId=${trade.id}, status=${existing.status}")
+                            return@withLock Result.success(Unit)
+                        } else {
+                            // 如果检查不到，可能是事务隔离级别问题，等待一下再查询
+                            delay(100)
+                            val existingAfterDelay =
+                                processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
+                            if (existingAfterDelay != null) {
+                                logger.debug("延迟查询到记录（并发检测）: leaderId=$leaderId, tradeId=${trade.id}, status=${existingAfterDelay.status}")
+                                return@withLock Result.success(Unit)
+                            }
+                            logger.warn(
+                                "保存ProcessedTrade时发生唯一约束冲突，但查询不到记录: leaderId=$leaderId, tradeId=${trade.id}",
+                                e
+                            )
+                            return@withLock Result.success(Unit)
+                        }
+                    } else {
+                        // 其他类型的异常，重新抛出
+                        throw e
+                    }
+                }
+
+                Result.success(Unit)
+            } catch (e: Exception) {
+                logger.error("处理交易异常: leaderId=$leaderId, tradeId=${trade.id}", e)
+                Result.failure(e)
+            }
         }
     }
 

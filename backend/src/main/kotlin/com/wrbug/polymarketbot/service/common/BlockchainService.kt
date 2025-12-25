@@ -117,7 +117,9 @@ class BlockchainService(
                 throw Exception("RPC 错误: ${rpcResponse.error.message}")
             }
             
-            val hexResult = rpcResponse.result ?: throw Exception("RPC 响应格式错误: result 为空")
+            // 使用 Gson 解析 result（JsonElement）
+            val hexResult = rpcResponse.result?.asString 
+                ?: throw Exception("RPC 响应格式错误: result 为空")
             
             // 解析代理地址
             val proxyAddress = EthereumUtils.decodeAddress(hexResult)
@@ -193,7 +195,9 @@ class BlockchainService(
             throw Exception("RPC 错误: ${rpcResponse.error.message}")
         }
         
-        val hexBalance = rpcResponse.result ?: throw Exception("RPC 响应格式错误: result 为空")
+        // 使用 Gson 解析 result（JsonElement）
+        val hexBalance = rpcResponse.result?.asString 
+            ?: throw Exception("RPC 响应格式错误: result 为空")
         
         // 将十六进制转换为 BigDecimal（USDC 有 6 位小数）
         val balanceWei = BigInteger(hexBalance.removePrefix("0x"), 16)
@@ -288,7 +292,9 @@ class BlockchainService(
                 return Result.failure(Exception("调用 getCollectionId 失败: ${collectionIdResult.error}"))
             }
             
-            val collectionId = collectionIdResult.result ?: return Result.failure(Exception("getCollectionId 返回结果为空"))
+            // 使用 Gson 解析 result（JsonElement）
+            val collectionId = collectionIdResult.result?.asString 
+                ?: return Result.failure(Exception("getCollectionId 返回结果为空"))
             
             // 2. 调用 getPositionId(collateralToken, collectionId)
             val getPositionIdSelector = EthereumUtils.getFunctionSelector("getPositionId(address,bytes32)")
@@ -318,7 +324,9 @@ class BlockchainService(
                 return Result.failure(Exception("调用 getPositionId 失败: ${positionIdResult.error}"))
             }
             
-            val tokenId = positionIdResult.result ?: return Result.failure(Exception("getPositionId 返回结果为空"))
+            // 使用 Gson 解析 result（JsonElement）
+            val tokenId = positionIdResult.result?.asString 
+                ?: return Result.failure(Exception("getPositionId 返回结果为空"))
             val tokenIdBigInt = EthereumUtils.decodeUint256(tokenId)
             
             Result.success(tokenIdBigInt.toString())
@@ -454,7 +462,9 @@ class BlockchainService(
             return Result.failure(Exception("获取 Proxy nonce 失败: ${rpcResponse.error.message}"))
         }
         
-        val hexNonce = rpcResponse.result ?: return Result.failure(Exception("Proxy nonce 结果为空"))
+        // 使用 Gson 解析 result（JsonElement）
+        val hexNonce = rpcResponse.result?.asString 
+            ?: return Result.failure(Exception("Proxy nonce 结果为空"))
         val nonce = EthereumUtils.decodeUint256(hexNonce)
         return Result.success(nonce)
     }
@@ -482,7 +492,9 @@ class BlockchainService(
             return Result.failure(Exception("获取 nonce 失败: ${rpcResponse.error.message}"))
         }
         
-        val hexNonce = rpcResponse.result ?: return Result.failure(Exception("nonce 结果为空"))
+        // 使用 Gson 解析 result（JsonElement）
+        val hexNonce = rpcResponse.result?.asString 
+            ?: return Result.failure(Exception("nonce 结果为空"))
         val nonce = EthereumUtils.decodeUint256(hexNonce)
         return Result.success(nonce)
     }
@@ -508,7 +520,9 @@ class BlockchainService(
             return Result.failure(Exception("获取 gas price 失败: ${rpcResponse.error.message}"))
         }
         
-        val hexGasPrice = rpcResponse.result ?: return Result.failure(Exception("gas price 结果为空"))
+        // 使用 Gson 解析 result（JsonElement）
+        val hexGasPrice = rpcResponse.result?.asString 
+            ?: return Result.failure(Exception("gas price 结果为空"))
         val gasPrice = EthereumUtils.decodeUint256(hexGasPrice)
         return Result.success(gasPrice)
     }
@@ -582,7 +596,9 @@ class BlockchainService(
             return Result.failure(Exception("发送交易失败: ${rpcResponse.error.message}"))
         }
         
-        val txHash = rpcResponse.result ?: return Result.failure(Exception("交易哈希为空"))
+        // 使用 Gson 解析 result（JsonElement）
+        val txHash = rpcResponse.result?.asString 
+            ?: return Result.failure(Exception("交易哈希为空"))
         return Result.success(txHash)
     }
     
@@ -611,7 +627,9 @@ class BlockchainService(
                 return Result.failure(Exception("查询交易失败: ${txRpcResponse.error.message}"))
             }
             
-            val txResult = txRpcResponse.result ?: return Result.failure(Exception("交易结果为空"))
+            // 使用 Gson 解析 result（JsonElement）
+            val txResult = txRpcResponse.result?.toString() 
+                ?: return Result.failure(Exception("交易结果为空"))
             
             // 查询交易回执（包含内部调用和事件日志）
             val receiptRequest = JsonRpcRequest(
@@ -628,7 +646,7 @@ class BlockchainService(
             val receiptResult = if (receiptRpcResponse.error != null) {
                 "交易回执查询失败: ${receiptRpcResponse.error.message}"
             } else {
-                receiptRpcResponse.result ?: "交易回执为空（可能还在打包中）"
+                receiptRpcResponse.result?.toString() ?: "交易回执为空（可能还在打包中）"
             }
             
             Result.success("交易信息:\n$txResult\n\n交易回执:\n$receiptResult")

@@ -151,13 +151,13 @@ class CopyTradingService(
             
             val saved = copyTradingRepository.save(copyTrading)
             
-            // 如果跟单已启用，重新启动监听（确保状态完全同步）
+            // 如果跟单已启用，更新 Leader 监听（增量更新，不重启所有监听）
             if (saved.enabled) {
                 kotlinx.coroutines.runBlocking {
                     try {
-                        monitorService.restartMonitoring()
+                        monitorService.updateLeaderMonitoring(saved.leaderId)
                     } catch (e: Exception) {
-                        logger.error("重新启动跟单监听失败", e)
+                        logger.error("更新 Leader 监听失败", e)
                     }
                 }
             }
@@ -219,12 +219,12 @@ class CopyTradingService(
             
             val saved = copyTradingRepository.save(updated)
             
-            // 重新启动监听（确保状态完全同步）
+            // 更新 Leader 监听（增量更新，根据 enabled 状态决定添加或移除）
             kotlinx.coroutines.runBlocking {
                 try {
-                    monitorService.restartMonitoring()
+                    monitorService.updateLeaderMonitoring(saved.leaderId)
                 } catch (e: Exception) {
-                    logger.error("重新启动跟单监听失败", e)
+                    logger.error("更新 Leader 监听失败", e)
                 }
             }
             
@@ -322,14 +322,15 @@ class CopyTradingService(
             val copyTrading = copyTradingRepository.findById(copyTradingId).orElse(null)
                 ?: return Result.failure(IllegalArgumentException("跟单配置不存在"))
             
+            val leaderId = copyTrading.leaderId
             copyTradingRepository.delete(copyTrading)
             
-            // 重新启动监听（确保状态完全同步）
+            // 更新 Leader 监听（检查该 Leader 是否还有其他启用的跟单配置）
             kotlinx.coroutines.runBlocking {
                 try {
-                    monitorService.restartMonitoring()
+                    monitorService.removeLeaderMonitoring(leaderId)
                 } catch (e: Exception) {
-                    logger.error("重新启动跟单监听失败", e)
+                    logger.error("更新 Leader 监听失败", e)
                 }
             }
             

@@ -446,7 +446,7 @@ class RpcNodeService(
                 ))
             }
             
-            val blockNumber = rpcResponse.result
+            val blockNumber = rpcResponse.result?.asString
             if (blockNumber.isNullOrBlank()) {
                 return Result.success(NodeCheckResult(
                     status = NodeHealthStatus.UNHEALTHY,
