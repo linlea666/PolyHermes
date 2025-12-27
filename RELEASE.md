@@ -1,5 +1,24 @@
 # v1.1.1
 
+## 🚀 主要功能
+
+### 🔗 链上 WebSocket 监听优化
+- 创建 `UnifiedOnChainWsService` 统一管理 WebSocket 连接，所有服务共享同一个连接
+- 创建 `OnChainWsUtils` 工具类，提取公共的链上 WebSocket 相关功能
+- 创建 `AccountOnChainMonitorService` 监听账户链上卖出和赎回事件
+- 优化 `OnChainWsService`，复用公共代码，减少代码重复
+- 支持通过链上 WebSocket 实时监听账户的卖出和赎回交易，自动更新订单状态
+
+### 📊 市场状态查询优化
+- 优化市场结算状态查询，优先使用链上查询 `ConditionalTokens.getCondition`
+- 如果链上查询失败，自动降级到 Gamma API 查询
+- 提供更实时和准确的市场结算结果
+
+### 🔕 自动订单通知优化
+- 自动生成的订单（AUTO_、AUTO_FIFO_、AUTO_WS_ 前缀）不再发送 Telegram 通知
+- 优化 `OrderStatusUpdateService`，跳过自动生成订单的通知处理
+- 减少不必要的通知，提升用户体验
+
 ## 🐛 Bug 修复
 
 ### 修复移动端 API 健康页面缺少数据显示
@@ -7,6 +26,8 @@
 - 移动端添加状态文本显示（正常/异常/未配置）
 - 移动端添加消息/状态信息显示
 - 移动端和桌面端显示信息保持一致
+
+## 🔧 功能优化
 
 ### 优化 Telegram 推送消息格式
 - 添加价格和数量截位处理：
@@ -20,13 +41,24 @@
 
 ### 配置优化
 - 移除 `polygon.rpc.url` 配置，使用 RpcNodeService 统一管理 RPC 节点
-- 删除无用的 `position.push` 配置项
-- 修正日志配置中的包名
+- 删除无用的 `position.push.polling-interval` 和 `position.push.heartbeat-timeout` 配置项
+- 修正日志配置中的包名（polyhermes -> polymarketbot）
+- 更新 `ApiHealthCheckService` 直接使用 `RpcNodeService.getHttpUrl()`
 
 ## 📚 文档更新
 
-- 统一发布说明文件，使用 RELEASE.md 替代版本化文件
+- 统一发布说明文件，使用 RELEASE.md 替代版本化文件（RELEASE_v1.0.1.md、RELEASE_v1.1.0.md）
 - 更新所有部署文档，移除 POLYGON_RPC_URL 相关说明
+- 更新所有 Docker Compose 配置文件，移除 POLYGON_RPC_URL 环境变量
+- 更新所有部署脚本，移除 POLYGON_RPC_URL 环境变量定义
+
+## 🔧 技术改进
+
+- 重构链上 WebSocket 服务，提取公共代码到 `OnChainWsUtils`
+- 创建统一的 WebSocket 连接管理服务 `UnifiedOnChainWsService`
+- 添加链上查询市场结算结果的功能（`BlockchainService.getCondition`）
+- 添加 ABI 编码/解码工具方法（`EthereumUtils.decodeConditionResult`）
+- 优化代码结构，减少代码重复，提高可维护性
 
 ---
 
@@ -96,6 +128,12 @@
 - **GitHub Release**: https://github.com/WrBug/PolyHermes/releases/tag/v1.1.1
 - **完整更新日志**: https://github.com/WrBug/PolyHermes/compare/v1.1.0...v1.1.1
 - **Docker Hub**: https://hub.docker.com/r/wrbug/polyhermes
+
+## 📊 统计信息
+
+- **文件变更**: 32 个文件
+- **代码变更**: +1872 行 / -1503 行
+- **主要提交**: 7 个提交
 
 ## ⚠️ 重要提醒
 
