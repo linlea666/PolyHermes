@@ -163,7 +163,6 @@ DB_USERNAME=root
 DB_PASSWORD=your_password_here
 SPRING_PROFILES_ACTIVE=prod
 SERVER_PORT=80
-POLYGON_RPC_URL=https://polygon-rpc.com
 JWT_SECRET=your-jwt-secret-key-change-in-production
 ADMIN_RESET_PASSWORD_KEY=your-admin-reset-key-change-in-production
 EOF
@@ -393,7 +392,6 @@ DB_USERNAME=root
 DB_PASSWORD=your_password_here
 SPRING_PROFILES_ACTIVE=prod
 SERVER_PORT=8000
-POLYGON_RPC_URL=https://polygon-rpc.com
 JWT_SECRET=your-jwt-secret-key-change-in-production
 ADMIN_RESET_PASSWORD_KEY=your-admin-reset-key-change-in-production
 EOF
@@ -554,7 +552,6 @@ serve -s dist -l 3000
 | `DB_USERNAME` | Database username | `root` | Yes (Production) |
 | `DB_PASSWORD` | Database password | - | Yes (Production) |
 | `SERVER_PORT` | Server port | `8000` | No |
-| `POLYGON_RPC_URL` | Polygon RPC address | `https://polygon-rpc.com` | No |
 | `JWT_SECRET` | JWT secret key | - | Yes (Production) |
 | `ADMIN_RESET_PASSWORD_KEY` | Admin password reset key | - | Yes (Production) |
 

@@ -125,88 +125,88 @@ open class CopyOrderTrackingService(
         
         return mutex.withLock {
             try {
-                // 1. 检查是否已处理（去重，包括失败状态）
-                val existingProcessed = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
+            // 1. 检查是否已处理（去重，包括失败状态）
+            val existingProcessed = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
 
-                if (existingProcessed != null) {
-                    if (existingProcessed.status == "FAILED") {
+            if (existingProcessed != null) {
+                if (existingProcessed.status == "FAILED") {
                         return@withLock Result.success(Unit)
-                    }
+                }
                     return@withLock Result.success(Unit)
-                }
+            }
 
-                // 检查是否已记录为失败交易
-                val failedTrade = failedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
-                if (failedTrade != null) {
+            // 检查是否已记录为失败交易
+            val failedTrade = failedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
+            if (failedTrade != null) {
                     return@withLock Result.success(Unit)
-                }
+            }
 
-                // 2. 处理交易逻辑
-                val result = when (trade.side.uppercase()) {
-                    "BUY" -> processBuyTrade(leaderId, trade)
-                    "SELL" -> processSellTrade(leaderId, trade)
-                    else -> {
-                        logger.warn("未知的交易方向: ${trade.side}")
-                        Result.failure(IllegalArgumentException("未知的交易方向: ${trade.side}"))
-                    }
+            // 2. 处理交易逻辑
+            val result = when (trade.side.uppercase()) {
+                "BUY" -> processBuyTrade(leaderId, trade)
+                "SELL" -> processSellTrade(leaderId, trade)
+                else -> {
+                    logger.warn("未知的交易方向: ${trade.side}")
+                    Result.failure(IllegalArgumentException("未知的交易方向: ${trade.side}"))
                 }
+            }
 
-                if (result.isFailure) {
-                    logger.error(
-                        "处理交易失败: leaderId=$leaderId, tradeId=${trade.id}, side=${trade.side}",
-                        result.exceptionOrNull()
-                    )
+            if (result.isFailure) {
+                logger.error(
+                    "处理交易失败: leaderId=$leaderId, tradeId=${trade.id}, side=${trade.side}",
+                    result.exceptionOrNull()
+                )
                     return@withLock result
-                }
+            }
 
-                // 3. 标记为已处理（成功状态）
+            // 3. 标记为已处理（成功状态）
                 // 由于使用了 Mutex，这里理论上不会出现并发冲突，但保留异常处理作为兜底
-                try {
-                    val processed = ProcessedTrade(
-                        leaderId = leaderId,
-                        leaderTradeId = trade.id,
-                        tradeType = trade.side.uppercase(),
-                        source = source,
-                        status = "SUCCESS",
-                        processedAt = System.currentTimeMillis()
-                    )
-                    processedTradeRepository.save(processed)
-                } catch (e: Exception) {
-                    // 检查是否是唯一键冲突异常（理论上不会发生，但保留作为兜底）
-                    if (isUniqueConstraintViolation(e)) {
-                        val existing = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
-                        if (existing != null) {
-                            if (existing.status == "FAILED") {
-                                logger.debug("交易已标记为失败，跳过处理: leaderId=$leaderId, tradeId=${trade.id}")
-                                return@withLock Result.success(Unit)
-                            }
-                            logger.debug("交易已处理（并发检测）: leaderId=$leaderId, tradeId=${trade.id}, status=${existing.status}")
-                            return@withLock Result.success(Unit)
-                        } else {
-                            // 如果检查不到，可能是事务隔离级别问题，等待一下再查询
-                            delay(100)
-                            val existingAfterDelay =
-                                processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
-                            if (existingAfterDelay != null) {
-                                logger.debug("延迟查询到记录（并发检测）: leaderId=$leaderId, tradeId=${trade.id}, status=${existingAfterDelay.status}")
-                                return@withLock Result.success(Unit)
-                            }
-                            logger.warn(
-                                "保存ProcessedTrade时发生唯一约束冲突，但查询不到记录: leaderId=$leaderId, tradeId=${trade.id}",
-                                e
-                            )
-                            return@withLock Result.success(Unit)
-                        }
-                    } else {
-                        // 其他类型的异常，重新抛出
-                        throw e
-                    }
-                }
-
-                Result.success(Unit)
+            try {
+                val processed = ProcessedTrade(
+                    leaderId = leaderId,
+                    leaderTradeId = trade.id,
+                    tradeType = trade.side.uppercase(),
+                    source = source,
+                    status = "SUCCESS",
+                    processedAt = System.currentTimeMillis()
+                )
+                processedTradeRepository.save(processed)
             } catch (e: Exception) {
-                logger.error("处理交易异常: leaderId=$leaderId, tradeId=${trade.id}", e)
-                Result.failure(e)
+                    // 检查是否是唯一键冲突异常（理论上不会发生，但保留作为兜底）
+                if (isUniqueConstraintViolation(e)) {
+                    val existing = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
+                    if (existing != null) {
+                        if (existing.status == "FAILED") {
+                            logger.debug("交易已标记为失败，跳过处理: leaderId=$leaderId, tradeId=${trade.id}")
+                                return@withLock Result.success(Unit)
+                        }
+                        logger.debug("交易已处理（并发检测）: leaderId=$leaderId, tradeId=${trade.id}, status=${existing.status}")
+                            return@withLock Result.success(Unit)
+                    } else {
+                        // 如果检查不到，可能是事务隔离级别问题，等待一下再查询
+                        delay(100)
+                        val existingAfterDelay =
+                            processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
+                        if (existingAfterDelay != null) {
+                            logger.debug("延迟查询到记录（并发检测）: leaderId=$leaderId, tradeId=${trade.id}, status=${existingAfterDelay.status}")
+                                return@withLock Result.success(Unit)
+                        }
+                        logger.warn(
+                            "保存ProcessedTrade时发生唯一约束冲突，但查询不到记录: leaderId=$leaderId, tradeId=${trade.id}",
+                            e
+                        )
+                            return@withLock Result.success(Unit)
+                    }
+                } else {
+                    // 其他类型的异常，重新抛出
+                    throw e
+                }
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            logger.error("处理交易异常: leaderId=$leaderId, tradeId=${trade.id}", e)
+            Result.failure(e)
             }
         }
     }
@@ -594,7 +594,7 @@ open class CopyOrderTrackingService(
                     )
 
                     copyOrderTrackingRepository.save(tracking)
-                    
+
                     logger.info("买入订单已保存，等待轮询任务获取实际数据后发送通知: orderId=$realOrderId, copyTradingId=${copyTrading.id}")
                 } catch (e: Exception) {
                     logger.error("处理买入交易失败: copyTradingId=${copyTrading.id}, tradeId=${trade.id}", e)
@@ -995,7 +995,7 @@ open class CopyOrderTrackingService(
         }
 
         val realSellOrderId = createOrderResult.getOrNull() ?: return
-        
+
         // 12. 下单时直接使用下单价格保存，等待定时任务更新实际成交价
         // priceUpdated 统一由定时任务更新，下单时统一设置为 false（非0x开头的除外）
         val priceUpdated = !realSellOrderId.startsWith("0x", ignoreCase = true)

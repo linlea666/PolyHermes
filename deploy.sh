@@ -71,9 +71,6 @@ SERVER_PORT=80
 # MySQL 端口（可选，用于外部连接，默认 3307 避免与本地 MySQL 冲突）
 MYSQL_PORT=3307
 
-# Polygon RPC
-POLYGON_RPC_URL=https://polygon-rpc.com
-
 # JWT 密钥（已自动生成随机值，生产环境建议修改）
 JWT_SECRET=${JWT_SECRET}
 

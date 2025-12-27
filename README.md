@@ -270,7 +270,6 @@ DB_USERNAME=root
 DB_PASSWORD=your_password_here
 SPRING_PROFILES_ACTIVE=prod
 SERVER_PORT=80
-POLYGON_RPC_URL=https://polygon-rpc.com
 JWT_SECRET=your-jwt-secret-key-change-in-production
 ADMIN_RESET_PASSWORD_KEY=your-admin-reset-key-change-in-production
 EOF
@@ -337,7 +336,6 @@ cd frontend
 | `DB_USERNAME` | 数据库用户名 | `root` |
 | `DB_PASSWORD` | 数据库密码 | - |
 | `SERVER_PORT` | 后端服务端口 | `8000` |
-| `POLYGON_RPC_URL` | Polygon RPC 地址 | `https://polygon-rpc.com` |
 | `JWT_SECRET` | JWT 密钥 | - |
 | `ADMIN_RESET_PASSWORD_KEY` | 管理员密码重置密钥 | - |
 | `CRYPTO_SECRET_KEY` | 加密密钥（用于加密存储私钥和 API Key） | - |

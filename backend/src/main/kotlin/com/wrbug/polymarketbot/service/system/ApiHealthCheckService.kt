@@ -28,8 +28,6 @@ class ApiHealthCheckService(
     private val dataApiBaseUrl: String,
     @Value("\${polymarket.gamma.base-url}")
     private val gammaBaseUrl: String,
-    @Value("\${polygon.rpc.url:}")
-    private val polygonRpcUrl: String,
     @Value("\${polymarket.rtds.ws-url}")
     private val polymarketWsUrl: String,
     @Value("\${polymarket.builder.relayer-url:}")
@@ -187,27 +185,11 @@ class ApiHealthCheckService(
 
     /**
      * 检查 Polygon RPC
-     * 使用动态获取的可用节点，而不是固定的配置
+     * 使用动态获取的可用节点（RpcNodeService 总是返回一个有效的 URL，包括默认节点）
      */
     private suspend fun checkPolygonRpc(): ApiHealthCheckDto = withContext(Dispatchers.IO) {
-        // 优先使用动态获取的可用节点
-        val rpcUrl = try {
-            rpcNodeService.getHttpUrl()
-        } catch (e: Exception) {
-            logger.debug("获取可用 RPC 节点失败，使用配置的默认值: ${e.message}")
-            // 如果获取失败，使用配置的默认值作为兜底
-            if (polygonRpcUrl.isNotBlank()) {
-                polygonRpcUrl
-            } else {
-                return@withContext ApiHealthCheckDto(
-                    name = "Polygon RPC",
-                    url = "未配置",
-                    status = "skipped",
-                    message = "未配置 Polygon RPC URL 且没有可用的节点"
-                )
-            }
-        }
-        
+        // 使用 RpcNodeService 获取可用节点（总是返回有效值，包括默认节点）
+        val rpcUrl = rpcNodeService.getHttpUrl()
         checkJsonRpcApi("Polygon RPC", rpcUrl)
     }
 
