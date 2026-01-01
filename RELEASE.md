@@ -1,3 +1,111 @@
+# v1.1.2
+
+## 🚀 主要功能
+
+### 🐛 修复内存泄漏问题
+- 修复 Retrofit/OkHttpClient 实例重复创建导致的内存泄漏问题
+- 为不需要认证的 API 创建共享的 OkHttpClient 实例（Gamma API、Data API、GitHub API 等）
+- 带认证的 CLOB API 按钱包地址缓存（每个账户一个客户端）
+- RPC API 按 RPC URL 缓存，Builder Relayer API 按 relayerUrl 缓存
+- 添加 `@PreDestroy` 方法清理缓存，确保资源正确释放
+- **效果**：内存占用从运行几小时后从 400MB 涨到 1GB+ 变为保持稳定，大幅减少内存占用
+
+### 📊 市场价格服务优化
+- 移除降级查询逻辑，仅保留链上 RPC 查询和 CLOB 订单簿查询
+- 移除 CLOB Trades、Gamma Market Status、Gamma Market Price 查询逻辑
+- 如果所有数据源都失败，抛出明确的异常信息
+- 价格截位到 4 位小数（向下截断，不四舍五入）
+- 简化代码逻辑，提高查询效率和准确性
+
+### 🔧 代码架构优化
+- 统一 Gson 使用，改为依赖注入方式
+- 在 `GsonConfig` 中统一配置 Gson Bean（lenient 模式）
+- 所有 Service 类通过构造函数注入 Gson 实例
+- 移除所有 `GsonConverterFactory.create()` 无参调用，统一使用注入的 Gson
+- 提高代码一致性和可维护性
+
+### 🗑️ 功能清理
+- 移除下单失败存储数据库的功能
+- 删除 `FailedTrade` 实体类和 `FailedTradeRepository`
+- 从 `CopyOrderTrackingService` 中移除失败交易存储逻辑
+- 创建 Flyway migration V16 删除 `failed_trade` 表
+- 下单失败时仅记录日志，不再存储到数据库，简化数据模型
+
+### 🚀 部署优化
+- 自动使用当前分支名作为 Docker 版本号
+- 分支名中的 `/` 自动替换为 `-`（Docker tag 不支持 `/）
+- `docker-compose.yml` 启用 build args，从环境变量读取版本号
+- 前端页面将显示当前分支名作为版本号
+- 如果没有 Git 仓库或获取失败，使用默认值 `dev`
+
+## 🐛 Bug 修复
+
+### 修复 Flyway Migration 问题
+- 恢复 V1 migration 文件，避免 checksum 不匹配
+- 保持 `V1__init_database.sql` 的原有内容不变
+- `failed_trade` 表的删除通过 V16 migration 处理
+- 确保已有数据库的 migration checksum 保持一致
+
+## 📚 文档更新
+
+- 新增智能资金分析文档（`docs/zh/smart-money-analysis.md`）
+- 详细说明智能资金分析功能的使用方法和策略
+
+## 🔧 技术改进
+
+- 优化 `RetrofitFactory`，实现客户端实例缓存和复用
+- 优化 `CopyOrderTrackingService`，移除失败交易相关逻辑
+- 优化 `OrderStatusUpdateService`，增强订单状态更新功能
+- 优化 `TelegramNotificationService`，改进通知逻辑
+- 优化 `PositionCheckService`，简化代码结构
+- 优化 `PolymarketClobService`，改进 API 调用逻辑
+
+## 📦 数据库变更
+
+- 删除 `failed_trade` 表（Migration: V16）
+
+## 🔗 相关链接
+
+- **GitHub Release**: https://github.com/WrBug/PolyHermes/releases/tag/v1.1.2
+- **完整更新日志**: https://github.com/WrBug/PolyHermes/compare/v1.1.1...v1.1.2
+- **Docker Hub**: https://hub.docker.com/r/wrbug/polyhermes
+
+## 📊 统计信息
+
+- **文件变更**: 28 个文件
+- **代码变更**: +1595 行 / -678 行
+- **主要提交**: 7 个提交
+
+## ⚠️ 重要提醒
+
+**请务必使用官方 Docker 镜像源，避免财产损失！**
+
+### ✅ 官方 Docker Hub 镜像
+
+**官方镜像地址**：`wrbug/polyhermes`
+
+```bash
+# ✅ 正确：使用官方镜像
+docker pull wrbug/polyhermes:v1.1.2
+
+# ❌ 错误：不要使用其他来源的镜像
+# 任何非官方来源的镜像都可能包含恶意代码，导致您的私钥和资产被盗
+```
+
+### 🔗 官方渠道
+
+请通过以下**唯一官方渠道**获取 PolyHermes：
+
+* **GitHub 仓库**：https://github.com/WrBug/PolyHermes
+* **Twitter**：@polyhermes
+* **Telegram 群组**：加入群组
+
+---
+
+**⭐ 如果这个项目对您有帮助，请给个 Star 支持一下！**
+
+---
+
 # v1.1.1
 
 ## 🚀 主要功能
