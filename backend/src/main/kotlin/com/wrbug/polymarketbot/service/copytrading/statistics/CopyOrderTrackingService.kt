@@ -37,7 +37,6 @@ open class CopyOrderTrackingService(
     private val sellMatchRecordRepository: SellMatchRecordRepository,
     private val sellMatchDetailRepository: SellMatchDetailRepository,
     private val processedTradeRepository: ProcessedTradeRepository,
-    private val failedTradeRepository: FailedTradeRepository,
     private val filteredOrderRepository: FilteredOrderRepository,
     private val copyTradingRepository: CopyTradingRepository,
     private val accountRepository: AccountRepository,
@@ -132,12 +131,6 @@ open class CopyOrderTrackingService(
                 if (existingProcessed.status == "FAILED") {
                         return@withLock Result.success(Unit)
                 }
-                    return@withLock Result.success(Unit)
-            }
-
-            // 检查是否已记录为失败交易
-            val failedTrade = failedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
-            if (failedTrade != null) {
                     return@withLock Result.success(Unit)
             }
 
@@ -491,27 +484,6 @@ open class CopyOrderTrackingService(
                     if (createOrderResult.isFailure) {
                         // 提取错误信息（只保留 code 和 errorBody）
                         val exception = createOrderResult.exceptionOrNull()
-                        val errorMsg = buildFullErrorMessage(
-                            exception,
-                            "BUY",
-                            buyPrice.toString(),
-                            finalBuyQuantity.toString(),
-                            trade.id
-                        )
-                        
-                        // 记录失败交易到数据库
-                        // retryCount = MAX_RETRY_ATTEMPTS - 1，表示已重试的次数
-                        recordFailedTrade(
-                            leaderId = leaderId,
-                            trade = trade,
-                            copyTradingId = copyTrading.id!!,
-                            accountId = copyTrading.accountId,
-                            side = "BUY",
-                            price = buyPrice.toString(),
-                            size = finalBuyQuantity.toString(),
-                            errorMessage = errorMsg,
-                            retryCount = MAX_RETRY_ATTEMPTS - 1  // 已重试次数
-                        )
 
                         // 发送订单失败通知（异步，不阻塞，仅在 pushFailedOrders 为 true 时发送）
                         if (copyTrading.pushFailedOrders) {
@@ -971,26 +943,9 @@ open class CopyOrderTrackingService(
         )
 
         if (createOrderResult.isFailure) {
-            // 创建订单失败，记录到失败表
+            // 创建订单失败，记录错误日志
             val exception = createOrderResult.exceptionOrNull()
-            val errorMsg = buildFullErrorMessage(
-                exception,
-                "SELL",
-                sellPrice.toString(),
-                totalMatched.toString(),
-                leaderSellTrade.id
-            )
-            recordFailedTrade(
-                leaderId = copyTrading.leaderId,
-                trade = leaderSellTrade,
-                copyTradingId = copyTrading.id!!,
-                accountId = copyTrading.accountId,
-                side = "SELL",  // 订单方向是SELL
-                price = sellPrice.toString(),
-                size = totalMatched.toString(),
-                errorMessage = errorMsg,
-                retryCount = 1  // 已重试一次
-            )
+            logger.error("创建卖出订单失败: copyTradingId=${copyTrading.id}, tradeId=${leaderSellTrade.id}, error=${exception?.message}")
             return
         }
 
@@ -1248,98 +1203,6 @@ open class CopyOrderTrackingService(
         return "code=$code, errorBody=$errorBody"
     }
 
-    /**
-     * 记录失败交易到数据库
-     * 注意：此方法在 @Transactional 方法中被调用，会自动继承事务
-     */
-    private suspend fun recordFailedTrade(
-        leaderId: Long,
-        trade: TradeResponse,
-        copyTradingId: Long,
-        accountId: Long,
-        side: String,
-        price: String,
-        size: String,
-        errorMessage: String,
-        retryCount: Int
-    ) {
-        try {
-            // 确保错误信息不超过数据库字段限制（TEXT类型通常支持65535字符）
-            val maxErrorMessageLength = 50000  // 保留一些余量
-            val finalErrorMessage = if (errorMessage.length > maxErrorMessageLength) {
-                errorMessage.substring(0, maxErrorMessageLength) + "... (截断)"
-            } else {
-                errorMessage
-            }
-
-            val failedTrade = FailedTrade(
-                leaderId = leaderId,
-                leaderTradeId = trade.id,
-                tradeType = trade.side.uppercase(),
-                copyTradingId = copyTradingId,
-                accountId = accountId,
-                marketId = trade.market,
-                side = side,
-                price = price,
-                size = size,
-                errorMessage = finalErrorMessage,
-                retryCount = retryCount,
-                failedAt = System.currentTimeMillis()
-            )
-            failedTradeRepository.save(failedTrade)
-
-            // 记录日志，确认已保存到数据库
-            logger.info("失败交易已保存到数据库: leaderId=$leaderId, tradeId=${trade.id}, errorMessageLength=${finalErrorMessage.length}")
-
-            // 标记为已处理（失败状态），避免重复处理
-            // 注意：并发情况下可能多个请求同时处理同一笔交易，需要处理唯一约束冲突
-            try {
-                val processed = ProcessedTrade(
-                    leaderId = leaderId,
-                    leaderTradeId = trade.id,
-                    tradeType = trade.side.uppercase(),
-                    source = "polling",
-                    status = "FAILED",
-                    processedAt = System.currentTimeMillis()
-                )
-                processedTradeRepository.save(processed)
-            } catch (e: Exception) {
-                // 检查是否是唯一键冲突异常
-                if (isUniqueConstraintViolation(e)) {
-                    // 唯一约束冲突，说明已经处理过了（可能是并发请求）
-                    // 检查现有记录的状态
-                    val existing = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
-                    if (existing != null) {
-                        if (existing.status == "SUCCESS") {
-                            logger.warn("交易已成功处理，但尝试记录为失败（并发冲突）: leaderId=$leaderId, tradeId=${trade.id}")
-                        } else {
-                            logger.debug("交易已标记为失败（并发检测）: leaderId=$leaderId, tradeId=${trade.id}")
-                        }
-                    } else {
-                        // 如果查询不到，等待一下再查询（可能是事务隔离级别问题）
-                        delay(100)
-                        val existingAfterDelay =
-                            processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
-                        if (existingAfterDelay != null) {
-                            logger.debug("延迟查询到记录（并发检测）: leaderId=$leaderId, tradeId=${trade.id}, status=${existingAfterDelay.status}")
-                        } else {
-                            logger.warn(
-                                "保存ProcessedTrade失败记录时发生唯一约束冲突，但查询不到记录: leaderId=$leaderId, tradeId=${trade.id}",
-                                e
-                            )
-                        }
-                    }
-                } else {
-                    // 其他类型的异常，记录但不抛出（避免影响其他交易的处理）
-                    logger.warn("保存ProcessedTrade失败记录时发生异常: leaderId=$leaderId, tradeId=${trade.id}", e)
-                }
-            }
-
-            logger.warn("已记录失败交易: leaderId=$leaderId, tradeId=${trade.id}, error=$errorMessage")
-        } catch (e: Exception) {
-            logger.error("记录失败交易异常: leaderId=$leaderId, tradeId=${trade.id}", e)
-        }
-    }
 
     /**
      * 更新订单状态
