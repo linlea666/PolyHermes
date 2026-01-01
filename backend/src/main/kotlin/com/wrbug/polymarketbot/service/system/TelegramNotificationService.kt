@@ -97,21 +97,28 @@ class TelegramNotificationService(
         if ((actualPrice == null || actualSize == null) && orderId != null && clobApi != null && apiKey != null && apiSecret != null && apiPassphrase != null && walletAddressForApi != null) {
             try {
                 val orderResponse = clobApi.getOrder(orderId)
-                if (orderResponse.isSuccessful && orderResponse.body() != null) {
-                    val order = orderResponse.body()!!
-                    if (actualPrice == null) {
-                    actualPrice = order.price
+                if (orderResponse.isSuccessful) {
+                    val order = orderResponse.body()
+                    if (order != null) {
+                        if (actualPrice == null) {
+                            actualPrice = order.price
+                        }
+                        if (actualSize == null) {
+                            actualSize = order.originalSize  // 使用 originalSize 作为订单数量
+                        }
+                        actualSide = order.side  // 使用订单详情中的 side
+                        if (actualOutcome == null) {
+                            actualOutcome = order.outcome  // 使用订单详情中的 outcome（市场方向）
+                        }
+                    } else {
+                        logger.debug("查询订单详情失败: 响应体为空, orderId=$orderId")
                     }
-                    if (actualSize == null) {
-                    actualSize = order.originalSize  // 使用 originalSize 作为订单数量
-                    }
-                    actualSide = order.side  // 使用订单详情中的 side
-                    if (actualOutcome == null) {
-                    actualOutcome = order.outcome  // 使用订单详情中的 outcome（市场方向）
-                    }
+                } else {
+                    val errorBody = orderResponse.errorBody()?.string()?.take(200) ?: "无错误详情"
+                    logger.debug("查询订单详情失败: orderId=$orderId, code=${orderResponse.code()}, errorBody=$errorBody")
                 }
             } catch (e: Exception) {
-                logger.warn("查询订单详情失败: ${e.message}", e)
+                logger.warn("查询订单详情失败: orderId=$orderId, ${e.message}", e)
             }
         }
         

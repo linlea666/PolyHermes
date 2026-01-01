@@ -1,5 +1,7 @@
 package com.wrbug.polymarketbot.service.copytrading.monitor
 
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.reflect.TypeToken
 import com.wrbug.polymarketbot.api.*
@@ -18,6 +20,29 @@ import java.math.BigInteger
 object OnChainWsUtils {
     
     private val logger = LoggerFactory.getLogger(OnChainWsUtils::class.java)
+    
+    // 创建 Gson 实例（与 GsonConfig 中的配置一致，使用 lenient 模式）
+    private val gson: Gson = GsonBuilder()
+        .setLenient()
+        .create()
+    
+    /**
+     * 解析 JSON 字符串数组
+     * @param jsonString JSON 字符串，如 "[\"Yes\", \"No\"]"
+     * @return 字符串列表，如果解析失败返回空列表
+     */
+    private fun parseStringArray(jsonString: String?): List<String> {
+        if (jsonString.isNullOrBlank()) {
+            return emptyList()
+        }
+        
+        return try {
+            val listType = object : TypeToken<List<String>>() {}.type
+            gson.fromJson<List<String>>(jsonString, listType) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
     
     // 合约地址
     const val USDC_CONTRACT = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
@@ -240,24 +265,17 @@ object OnChainWsUtils {
             val clobTokenIds = when {
                 clobTokenIdsRaw == null -> null
                 else -> {
-                    try {
-                        // 尝试解析 JSON 字符串
-                        val gson = com.google.gson.Gson()
-                        val listType = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
-                        gson.fromJson<List<String>>(clobTokenIdsRaw, listType)
-                    } catch (e: Exception) {
-                        // 如果不是 JSON 字符串，可能是其他格式，返回 null
-                        null
-                    }
+                    // 解析 JSON 字符串
+                    parseStringArray(clobTokenIdsRaw)
                 }
             }
             
             // 解析 outcomes（可能是 JSON 字符串或数组）
-            val outcomes = com.wrbug.polymarketbot.util.JsonUtils.parseStringArray(market.outcomes)
+            val outcomes = parseStringArray(market.outcomes)
             
             // 查找 tokenId 在 clobTokenIds 中的索引
-            val outcomeIndex = clobTokenIds?.indexOfFirst { 
-                it.equals(tokenId, ignoreCase = true)
+            val outcomeIndex = clobTokenIds?.indexOfFirst { token ->
+                token.equals(tokenId, ignoreCase = true)
             }?.takeIf { it >= 0 }
             
             // 获取 outcome 名称

@@ -55,5 +55,11 @@ interface CopyOrderTrackingRepository : JpaRepository<CopyOrderTracking, Long> {
      * 查询未发送通知的买入订单（用于轮询更新）
      */
     fun findByNotificationSentFalse(): List<CopyOrderTracking>
+    
+    /**
+     * 查询指定时间之前创建的订单（用于检查30秒后未成交的订单）
+     */
+    @Query("SELECT t FROM CopyOrderTracking t WHERE t.createdAt <= :beforeTime")
+    fun findByCreatedAtBefore(beforeTime: Long): List<CopyOrderTracking>
 }
 

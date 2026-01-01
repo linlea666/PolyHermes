@@ -1,5 +1,6 @@
 package com.wrbug.polymarketbot.service.common
 
+import com.google.gson.Gson
 import com.wrbug.polymarketbot.api.EthereumRpcApi
 import com.wrbug.polymarketbot.api.JsonRpcRequest
 import com.wrbug.polymarketbot.api.JsonRpcResponse
@@ -29,7 +30,8 @@ class BlockchainService(
     private val dataApiBaseUrl: String,
     private val retrofitFactory: RetrofitFactory,
     private val relayClientService: RelayClientService,
-    private val rpcNodeService: RpcNodeService
+    private val rpcNodeService: RpcNodeService,
+    private val gson: Gson
 ) {
     
     private val logger = LoggerFactory.getLogger(BlockchainService::class.java)
@@ -64,7 +66,7 @@ class BlockchainService(
         Retrofit.Builder()
             .baseUrl("$baseUrl/")
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(PolymarketDataApi::class.java)
     }

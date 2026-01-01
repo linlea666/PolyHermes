@@ -1,5 +1,6 @@
 package com.wrbug.polymarketbot.service.common
 
+import com.google.gson.Gson
 import com.wrbug.polymarketbot.api.ApiKeyResponse
 import com.wrbug.polymarketbot.api.PolymarketClobApi
 import com.wrbug.polymarketbot.util.PolymarketL1AuthInterceptor
@@ -19,7 +20,8 @@ import retrofit2.converter.gson.GsonConverterFactory
 @Service
 class PolymarketApiKeyService(
     @Value("\${polymarket.clob.base-url}")
-    private val clobBaseUrl: String
+    private val clobBaseUrl: String,
+    private val gson: Gson
 ) {
     
     private val logger = LoggerFactory.getLogger(PolymarketApiKeyService::class.java)
@@ -222,7 +224,7 @@ class PolymarketApiKeyService(
         return Retrofit.Builder()
             .baseUrl(clobBaseUrl)
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(PolymarketClobApi::class.java)
     }
@@ -236,7 +238,7 @@ class PolymarketApiKeyService(
         return Retrofit.Builder()
             .baseUrl(clobBaseUrl)
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(PolymarketClobApi::class.java)
     }

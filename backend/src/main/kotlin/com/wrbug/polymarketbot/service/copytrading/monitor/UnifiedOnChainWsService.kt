@@ -27,13 +27,11 @@ import java.util.concurrent.ConcurrentHashMap
 @Service
 class UnifiedOnChainWsService(
     private val rpcNodeService: RpcNodeService,
-    private val retrofitFactory: RetrofitFactory
+    private val retrofitFactory: RetrofitFactory,
+    private val gson: Gson
 ) {
     
     private val logger = LoggerFactory.getLogger(UnifiedOnChainWsService::class.java)
-    
-    // Gson 实例，用于解析 JSON
-    private val gson = Gson()
     
     @Value("\${copy.trading.onchain.ws.reconnect.delay:3000}")
     private var reconnectDelay: Long = 3000  // 重连延迟（毫秒），默认3秒

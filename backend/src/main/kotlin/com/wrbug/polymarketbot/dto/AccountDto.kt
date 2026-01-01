@@ -195,14 +195,11 @@ data class LatestPriceRequest(
 )
 
 /**
- * 市场价格响应
+ * 市场当前价格响应
  */
 data class MarketPriceResponse(
     val marketId: String,
-    val lastPrice: String?,    // 最新成交价
-    val bestBid: String?,      // 最优买价（用于卖出参考）
-    val bestAsk: String?,      // 最优卖价（用于买入参考）
-    val midpoint: String?      // 中间价
+    val currentPrice: String   // 当前价格（通过 MarketPriceService 获取，支持多数据源降级）
 )
 
 /**

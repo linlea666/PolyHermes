@@ -434,14 +434,11 @@ export interface MarketPriceRequest {
 }
 
 /**
- * 市场价格响应
+ * 市场当前价格响应
  */
 export interface MarketPriceResponse {
   marketId: string
-  lastPrice?: string
-  bestBid?: string
-  bestAsk?: string
-  midpoint?: string
+  currentPrice: string
 }
 
 /**
