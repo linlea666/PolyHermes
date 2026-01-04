@@ -20,7 +20,7 @@ data class CopyTradingTemplate(
     @Column(name = "copy_mode", nullable = false, length = 10)
     val copyMode: String = "RATIO",  // "RATIO" 或 "FIXED"
     
-    @Column(name = "copy_ratio", nullable = false, precision = 10, scale = 2)
+    @Column(name = "copy_ratio", nullable = false, precision = 20, scale = 8)
     val copyRatio: BigDecimal = BigDecimal.ONE,  // 仅在 copyMode="RATIO" 时生效
     
     @Column(name = "fixed_amount", precision = 20, scale = 8)

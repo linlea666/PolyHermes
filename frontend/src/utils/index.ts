@@ -1,4 +1,35 @@
 /**
+ * 格式化数字，自动去除尾随零
+ * @param value - 数字值（字符串或数字）
+ * @param maxDecimals - 最大小数位数（默认不限制）
+ * @returns 格式化后的字符串，如果值为空或无效则返回 ''
+ * @example
+ * formatNumber(100.00) => "100"
+ * formatNumber(100.50) => "100.5"
+ * formatNumber(100.55) => "100.55"
+ */
+export const formatNumber = (value: string | number | undefined | null, maxDecimals?: number): string => {
+  if (value === undefined || value === null || value === '') {
+    return ''
+  }
+  
+  const num = typeof value === 'string' ? parseFloat(value) : value
+  if (isNaN(num)) {
+    return ''
+  }
+  
+  // 如果有最大小数位数限制，先截断
+  if (maxDecimals !== undefined) {
+    const multiplier = Math.pow(10, maxDecimals)
+    const truncated = Math.floor(num * multiplier) / multiplier
+    return truncated.toFixed(maxDecimals).replace(/\.?0+$/, '')
+  }
+  
+  // 直接转换为字符串，然后去除尾随零
+  return num.toString().replace(/\.?0+$/, '')
+}
+
+/**
  * 格式化 USDC 金额
  * 最多显示 4 位小数，自动去除尾随零（截断，不四舍五入）
  * @param value - 金额值（字符串或数字）

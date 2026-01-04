@@ -127,23 +127,24 @@ const TemplateAdd: React.FC = () => {
               tooltip={t('templateAdd.copyRatioTooltip') || '跟单比例表示跟单金额相对于 Leader 订单金额的百分比。例如：100% 表示 1:1 跟单，50% 表示半仓跟单，200% 表示双倍跟单'}
             >
               <InputNumber
-                min={10}
-                max={1000}
-                step={1}
-                precision={0}
+                min={0.01}
+                max={10000}
+                step={0.01}
+                precision={2}
                 style={{ width: '100%' }}
                 addonAfter="%"
                 placeholder={t('templateAdd.copyRatioPlaceholder') || '例如：100 表示 100%（1:1 跟单），默认 100%'}
                 parser={(value) => {
                   const parsed = parseFloat(value || '0')
-                  if (parsed > 1000) return 1000
+                  if (parsed > 10000) return 10000
                   return parsed
                 }}
                 formatter={(value) => {
-                  if (!value) return ''
+                  if (!value && value !== 0) return ''
                   const num = parseFloat(value.toString())
-                  if (num > 1000) return '1000'
-                  return value.toString()
+                  if (isNaN(num)) return ''
+                  if (num > 10000) return '10000'
+                  return num.toString().replace(/\.0+$/, '')
                 }}
               />
             </Form.Item>
@@ -177,6 +178,12 @@ const TemplateAdd: React.FC = () => {
                 precision={4}
                 style={{ width: '100%' }}
                 placeholder={t('templateAdd.fixedAmountPlaceholder') || '固定金额，不随 Leader 订单大小变化，必须 >= 1'}
+                formatter={(value) => {
+                  if (!value && value !== 0) return ''
+                  const num = parseFloat(value.toString())
+                  if (isNaN(num)) return ''
+                  return num.toString().replace(/\.0+$/, '')
+                }}
               />
             </Form.Item>
           )}
@@ -194,6 +201,12 @@ const TemplateAdd: React.FC = () => {
                   precision={4}
                   style={{ width: '100%' }}
                   placeholder={t('templateAdd.maxOrderSizePlaceholder') || '仅在比例模式下生效（可选）'}
+                  formatter={(value) => {
+                    if (!value && value !== 0) return ''
+                    const num = parseFloat(value.toString())
+                    if (isNaN(num)) return ''
+                    return num.toString().replace(/\.0+$/, '')
+                  }}
                 />
               </Form.Item>
               
@@ -221,6 +234,12 @@ const TemplateAdd: React.FC = () => {
                   precision={4}
                   style={{ width: '100%' }}
                   placeholder={t('templateAdd.minOrderSizePlaceholder') || '仅在比例模式下生效，必须 >= 1（可选）'}
+                  formatter={(value) => {
+                    if (!value && value !== 0) return ''
+                    const num = parseFloat(value.toString())
+                    if (isNaN(num)) return ''
+                    return num.toString().replace(/\.0+$/, '')
+                  }}
                 />
               </Form.Item>
             </>
@@ -251,6 +270,12 @@ const TemplateAdd: React.FC = () => {
               precision={2}
               style={{ width: '100%' }}
               placeholder={t('templateAdd.priceTolerancePlaceholder') || '默认 5%（可选）'}
+              formatter={(value) => {
+                if (!value && value !== 0) return ''
+                const num = parseFloat(value.toString())
+                if (isNaN(num)) return ''
+                return num.toString().replace(/\.0+$/, '')
+              }}
             />
           </Form.Item>
           
@@ -265,6 +290,12 @@ const TemplateAdd: React.FC = () => {
               precision={4}
               style={{ width: '100%' }}
               placeholder={t('templateAdd.minOrderDepthPlaceholder') || '例如：100（可选，不填写表示不启用）'}
+              formatter={(value) => {
+                if (!value && value !== 0) return ''
+                const num = parseFloat(value.toString())
+                if (isNaN(num)) return ''
+                return num.toString().replace(/\.0+$/, '')
+              }}
             />
           </Form.Item>
           
@@ -279,6 +310,12 @@ const TemplateAdd: React.FC = () => {
               precision={4}
               style={{ width: '100%' }}
               placeholder={t('templateAdd.maxSpreadPlaceholder') || '例如：0.05（5美分，可选，不填写表示不启用）'}
+              formatter={(value) => {
+                if (!value && value !== 0) return ''
+                const num = parseFloat(value.toString())
+                if (isNaN(num)) return ''
+                return num.toString().replace(/\.0+$/, '')
+              }}
             />
           </Form.Item>
           
@@ -298,6 +335,12 @@ const TemplateAdd: React.FC = () => {
                   precision={4}
                   style={{ width: '50%' }}
                   placeholder={t('templateAdd.minPricePlaceholder') || '最低价（可选）'}
+                  formatter={(value) => {
+                    if (!value && value !== 0) return ''
+                    const num = parseFloat(value.toString())
+                    if (isNaN(num)) return ''
+                    return num.toString().replace(/\.0+$/, '')
+                  }}
                 />
               </Form.Item>
               <span style={{ display: 'inline-block', width: '20px', textAlign: 'center', lineHeight: '32px' }}>-</span>
@@ -309,6 +352,12 @@ const TemplateAdd: React.FC = () => {
                   precision={4}
                   style={{ width: '50%' }}
                   placeholder={t('templateAdd.maxPricePlaceholder') || '最高价（可选）'}
+                  formatter={(value) => {
+                    if (!value && value !== 0) return ''
+                    const num = parseFloat(value.toString())
+                    if (isNaN(num)) return ''
+                    return num.toString().replace(/\.0+$/, '')
+                  }}
                 />
               </Form.Item>
             </Input.Group>

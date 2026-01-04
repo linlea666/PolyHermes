@@ -26,21 +26,23 @@ fun BigDecimal.multi(value: Any): BigDecimal {
     return BigDecimal.ZERO
 }
 
+
 /**
- * BigDecimal除法扩展函数
+ * BigDecimal除法扩展函数（带精度和舍入模式）
  * 安全地将BigDecimal与任意数值类型相除
  * @param value 除数，支持BigDecimal、BigInteger类型或可转换为BigDecimal的字符串
- * @return 除法结果，精度为18位小数，使用四舍五入模式，如果转换失败返回IllegalBigDecimal
+ * @param scale 精度（小数位数）
+ * @param roundingMode 舍入模式
+ * @return 除法结果，如果转换失败返回IllegalBigDecimal
  */
-fun BigDecimal.div(value: Any): BigDecimal {
+fun BigDecimal.div(value: Any, scale: Int = 18, roundingMode: RoundingMode = RoundingMode.HALF_UP): BigDecimal {
     kotlin.runCatching {
-        if (value is BigDecimal) {
-            return divide(value, 18, RoundingMode.HALF_UP).stripTrailingZeros()
+        val divisor = when (value) {
+            is BigDecimal -> value
+            is BigInteger -> value.toBigDecimal()
+            else -> BigDecimal(value.toString())
         }
-        if (value is BigInteger) {
-            return divide(value.toSafeBigDecimal(), 18, RoundingMode.HALF_UP).stripTrailingZeros()
-        }
-        return divide(BigDecimal(value.toString()), 18, RoundingMode.HALF_UP).stripTrailingZeros()
+        return divide(divisor, scale, roundingMode)
     }
     return IllegalBigDecimal
 }

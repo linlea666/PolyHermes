@@ -376,15 +376,46 @@ open class CopyOrderTrackingService(
                     // 验证订单数量限制（仅比例模式）
                     var finalBuyQuantity = buyQuantity
                     if (copyTrading.copyMode == "RATIO") {
-                        val orderAmount = buyQuantity.multi(trade.price.toSafeBigDecimal())
-                        if (orderAmount.lt(copyTrading.minOrderSize)) {
-                            logger.warn("订单金额低于最小限制，跳过: copyTradingId=${copyTrading.id}, amount=$orderAmount, min=${copyTrading.minOrderSize}")
-                            continue
+                        val tradePrice = trade.price.toSafeBigDecimal()
+                        val rawOrderAmount = buyQuantity.multi(tradePrice)
+                        
+                        // 对按比例计算的金额进行向上取整处理（确保满足最小限制）
+                        // 向上取整到 2 位小数（USDC 精度）
+                        val roundedOrderAmount = rawOrderAmount.setScale(2, java.math.RoundingMode.CEILING)
+                        
+                        // 如果原始金额或向上取整后的金额小于最小限制，调整 buyQuantity 以满足最小限制
+                        // 这样可以避免精度问题导致订单被错误地跳过
+                        if (roundedOrderAmount.lt(copyTrading.minOrderSize)) {
+                            logger.debug("订单金额（向上取整后）低于最小限制，调整数量以满足最小限制: copyTradingId=${copyTrading.id}, rawAmount=$rawOrderAmount, roundedAmount=$roundedOrderAmount, min=${copyTrading.minOrderSize}")
+                            // 计算满足最小限制所需的数量（向上取整）
+                            val minQuantity = copyTrading.minOrderSize.div(tradePrice, 8, java.math.RoundingMode.CEILING)
+                            if (minQuantity.lte(BigDecimal.ZERO)) {
+                                logger.warn("计算出的最小数量为0或负数，跳过: copyTradingId=${copyTrading.id}")
+                                continue
+                            }
+                            // 使用调整后的数量
+                            finalBuyQuantity = minQuantity
+                            logger.debug("已调整数量以满足最小限制: copyTradingId=${copyTrading.id}, originalQuantity=$buyQuantity, adjustedQuantity=$finalBuyQuantity, adjustedAmount=${finalBuyQuantity.multi(tradePrice)}")
+                        } else if (rawOrderAmount.lt(copyTrading.minOrderSize)) {
+                            // 原始金额小于最小限制，但向上取整后满足，调整数量以满足最小限制
+                            logger.debug("订单金额（精度处理后）低于最小限制，调整数量以满足最小限制: copyTradingId=${copyTrading.id}, rawAmount=$rawOrderAmount, min=${copyTrading.minOrderSize}")
+                            // 计算满足最小限制所需的数量（向上取整）
+                            val minQuantity = copyTrading.minOrderSize.div(tradePrice, 8, java.math.RoundingMode.CEILING)
+                            if (minQuantity.lte(BigDecimal.ZERO)) {
+                                logger.warn("计算出的最小数量为0或负数，跳过: copyTradingId=${copyTrading.id}")
+                                continue
+                            }
+                            // 使用调整后的数量
+                            finalBuyQuantity = minQuantity
+                            logger.debug("已调整数量以满足最小限制: copyTradingId=${copyTrading.id}, originalQuantity=$buyQuantity, adjustedQuantity=$finalBuyQuantity, adjustedAmount=${finalBuyQuantity.multi(tradePrice)}")
                         }
-                        if (orderAmount.gt(copyTrading.maxOrderSize)) {
-                            logger.warn("订单金额超过最大限制，调整数量: copyTradingId=${copyTrading.id}, amount=$orderAmount, max=${copyTrading.maxOrderSize}")
+                        
+                        // 检查最大限制（使用调整后的数量）
+                        val finalOrderAmount = finalBuyQuantity.multi(tradePrice)
+                        if (finalOrderAmount.gt(copyTrading.maxOrderSize)) {
+                            logger.warn("订单金额超过最大限制，调整数量: copyTradingId=${copyTrading.id}, amount=$finalOrderAmount, max=${copyTrading.maxOrderSize}")
                             // 调整数量到最大值
-                            val adjustedQuantity = copyTrading.maxOrderSize.div(trade.price.toSafeBigDecimal())
+                            val adjustedQuantity = copyTrading.maxOrderSize.div(tradePrice, 8, java.math.RoundingMode.DOWN)
                             if (adjustedQuantity.lte(BigDecimal.ZERO)) {
                                 logger.warn("调整后的数量为0或负数，跳过: copyTradingId=${copyTrading.id}")
                                 continue

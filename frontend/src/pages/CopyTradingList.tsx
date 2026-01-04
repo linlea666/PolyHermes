@@ -196,7 +196,7 @@ const CopyTradingList: React.FC = () => {
       render: (_: any, record: CopyTrading) => (
         <Tag color={record.copyMode === 'RATIO' ? 'blue' : 'green'}>
           {record.copyMode === 'RATIO' 
-            ? `${t('copyTradingList.ratioMode') || '比例'} ${record.copyRatio}x`
+            ? `${t('copyTradingList.ratioMode') || '比例'} ${(parseFloat(record.copyRatio || '0') * 100).toFixed(2).replace(/\.0+$/, '')}%`
             : `${t('copyTradingList.fixedAmountMode') || '固定'} ${formatUSDC(record.fixedAmount || '0')}`
           }
         </Tag>
@@ -466,7 +466,7 @@ const CopyTradingList: React.FC = () => {
                           color: '#666'
                         }}>
                           {record.copyMode === 'RATIO' 
-                            ? `${t('copyTradingList.ratioMode') || '比例'} ${record.copyRatio}x`
+                            ? `${t('copyTradingList.ratioMode') || '比例'} ${(parseFloat(record.copyRatio || '0') * 100).toFixed(2).replace(/\.0+$/, '')}%`
                             : `${t('copyTradingList.fixedAmountMode') || '固定'} ${formatUSDC(record.fixedAmount || '0')}`
                           }
                         </div>

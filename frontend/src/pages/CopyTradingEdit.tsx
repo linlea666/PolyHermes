@@ -237,13 +237,51 @@ const CopyTradingEdit: React.FC = () => {
               tooltip={t('copyTradingEdit.copyRatioTooltip') || '跟单比例表示跟单金额相对于 Leader 订单金额的百分比'}
             >
               <InputNumber
-                min={10}
-                max={1000}
-                step={1}
-                precision={0}
+                min={0.01}
+                max={10000}
+                step={0.01}
+                precision={2}
                 style={{ width: '100%' }}
                 addonAfter="%"
                 placeholder={t('copyTradingEdit.copyRatioPlaceholder') || '例如：100 表示 100%（1:1 跟单）'}
+                parser={(value) => {
+                  console.log('[CopyTradingEdit copyRatio parser] 输入值:', value, '类型:', typeof value)
+                  // 移除 % 符号和其他非数字字符（保留小数点和负号）
+                  const cleaned = (value || '').toString().replace(/%/g, '').trim()
+                  console.log('[CopyTradingEdit copyRatio parser] 清理后:', cleaned)
+                  const parsed = parseFloat(cleaned) || 0
+                  console.log('[CopyTradingEdit copyRatio parser] 解析后:', parsed)
+                  if (parsed > 10000) {
+                    console.log('[CopyTradingEdit copyRatio parser] 超过最大值，返回 10000')
+                    return 10000
+                  }
+                  if (parsed < 0.01) {
+                    console.log('[CopyTradingEdit copyRatio parser] 小于最小值，返回 0.01')
+                    return 0.01
+                  }
+                  console.log('[CopyTradingEdit copyRatio parser] 返回:', parsed)
+                  return parsed
+                }}
+                formatter={(value) => {
+                  console.log('[CopyTradingEdit copyRatio formatter] 输入值:', value, '类型:', typeof value)
+                  if (!value && value !== 0) {
+                    console.log('[CopyTradingEdit copyRatio formatter] 空值，返回空字符串')
+                    return ''
+                  }
+                  const num = parseFloat(value.toString())
+                  console.log('[CopyTradingEdit copyRatio formatter] 解析后:', num)
+                  if (isNaN(num)) {
+                    console.log('[CopyTradingEdit copyRatio formatter] NaN，返回空字符串')
+                    return ''
+                  }
+                  if (num > 10000) {
+                    console.log('[CopyTradingEdit copyRatio formatter] 超过最大值，返回 10000')
+                    return '10000'
+                  }
+                  const result = num.toString().replace(/\.0+$/, '')
+                  console.log('[CopyTradingEdit copyRatio formatter] 格式化后返回:', result)
+                  return result
+                }}
               />
             </Form.Item>
           )}
@@ -276,6 +314,12 @@ const CopyTradingEdit: React.FC = () => {
                 precision={4}
                 style={{ width: '100%' }}
                 placeholder={t('copyTradingEdit.fixedAmountPlaceholder') || '固定金额，不随 Leader 订单大小变化，必须 >= 1'}
+                formatter={(value) => {
+                  if (!value && value !== 0) return ''
+                  const num = parseFloat(value.toString())
+                  if (isNaN(num)) return ''
+                  return num.toString().replace(/\.0+$/, '')
+                }}
               />
             </Form.Item>
           )}
@@ -293,6 +337,12 @@ const CopyTradingEdit: React.FC = () => {
                   precision={4}
                   style={{ width: '100%' }}
                   placeholder={t('copyTradingEdit.maxOrderSizePlaceholder') || '仅在比例模式下生效（可选）'}
+                  formatter={(value) => {
+                    if (!value && value !== 0) return ''
+                    const num = parseFloat(value.toString())
+                    if (isNaN(num)) return ''
+                    return num.toString().replace(/\.0+$/, '')
+                  }}
                 />
               </Form.Item>
               
@@ -320,6 +370,12 @@ const CopyTradingEdit: React.FC = () => {
                   precision={4}
                   style={{ width: '100%' }}
                   placeholder={t('copyTradingEdit.minOrderSizePlaceholder') || '仅在比例模式下生效，必须 >= 1（可选）'}
+                  formatter={(value) => {
+                    if (!value && value !== 0) return ''
+                    const num = parseFloat(value.toString())
+                    if (isNaN(num)) return ''
+                    return num.toString().replace(/\.0+$/, '')
+                  }}
                 />
               </Form.Item>
             </>
@@ -336,6 +392,12 @@ const CopyTradingEdit: React.FC = () => {
               precision={4}
               style={{ width: '100%' }}
               placeholder={t('copyTradingEdit.maxDailyLossPlaceholder') || '默认 10000 USDC（可选）'}
+              formatter={(value) => {
+                if (!value && value !== 0) return ''
+                const num = parseFloat(value.toString())
+                if (isNaN(num)) return ''
+                return num.toString().replace(/\.0+$/, '')
+              }}
             />
           </Form.Item>
           
@@ -364,6 +426,12 @@ const CopyTradingEdit: React.FC = () => {
               precision={2}
               style={{ width: '100%' }}
               placeholder={t('copyTradingEdit.priceTolerancePlaceholder') || '默认 5%（可选）'}
+              formatter={(value) => {
+                if (!value && value !== 0) return ''
+                const num = parseFloat(value.toString())
+                if (isNaN(num)) return ''
+                return num.toString().replace(/\.0+$/, '')
+              }}
             />
           </Form.Item>
           
@@ -391,6 +459,12 @@ const CopyTradingEdit: React.FC = () => {
               precision={4}
               style={{ width: '100%' }}
               placeholder={t('copyTradingEdit.minOrderDepthPlaceholder') || '例如：100（可选，不填写表示不启用）'}
+              formatter={(value) => {
+                if (!value && value !== 0) return ''
+                const num = parseFloat(value.toString())
+                if (isNaN(num)) return ''
+                return num.toString().replace(/\.0+$/, '')
+              }}
             />
           </Form.Item>
           
@@ -405,6 +479,12 @@ const CopyTradingEdit: React.FC = () => {
               precision={4}
               style={{ width: '100%' }}
               placeholder={t('copyTradingEdit.maxSpreadPlaceholder') || '例如：0.05（5美分，可选，不填写表示不启用）'}
+              formatter={(value) => {
+                if (!value && value !== 0) return ''
+                const num = parseFloat(value.toString())
+                if (isNaN(num)) return ''
+                return num.toString().replace(/\.0+$/, '')
+              }}
             />
           </Form.Item>
           
@@ -424,6 +504,12 @@ const CopyTradingEdit: React.FC = () => {
                   precision={4}
                   style={{ width: '50%' }}
                   placeholder={t('copyTradingEdit.minPricePlaceholder') || '最低价（可选）'}
+                  formatter={(value) => {
+                    if (!value && value !== 0) return ''
+                    const num = parseFloat(value.toString())
+                    if (isNaN(num)) return ''
+                    return num.toString().replace(/\.0+$/, '')
+                  }}
                 />
               </Form.Item>
               <span style={{ display: 'inline-block', width: '20px', textAlign: 'center', lineHeight: '32px' }}>-</span>
@@ -435,6 +521,12 @@ const CopyTradingEdit: React.FC = () => {
                   precision={4}
                   style={{ width: '50%' }}
                   placeholder={t('copyTradingEdit.maxPricePlaceholder') || '最高价（可选）'}
+                  formatter={(value) => {
+                    if (!value && value !== 0) return ''
+                    const num = parseFloat(value.toString())
+                    if (isNaN(num)) return ''
+                    return num.toString().replace(/\.0+$/, '')
+                  }}
                 />
               </Form.Item>
             </Input.Group>
@@ -453,6 +545,12 @@ const CopyTradingEdit: React.FC = () => {
               precision={4}
               style={{ width: '100%' }}
               placeholder={t('copyTradingEdit.maxPositionValuePlaceholder') || '例如：100（可选，不填写表示不启用）'}
+              formatter={(value) => {
+                if (!value && value !== 0) return ''
+                const num = parseFloat(value.toString())
+                if (isNaN(num)) return ''
+                return num.toString().replace(/\.0+$/, '')
+              }}
             />
           </Form.Item>
           

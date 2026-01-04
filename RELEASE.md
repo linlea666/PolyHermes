@@ -1,3 +1,133 @@
+# v1.1.5
+
+## 🔧 功能优化与改进
+
+### 前端优化
+
+#### 优化 InputNumber 输入框格式化
+- 优化数值输入框的格式化逻辑，修正正则表达式以正确处理整数显示
+- 更新所有相关 InputNumber 组件的 formatter 函数，确保显示准确性
+- 影响的组件：CopyTradingAdd、CopyTradingEdit、EditModal、TemplateAdd、TemplateEdit、TemplateList
+- 影响范围：跟单配置、模板配置中的所有数值输入框
+
+#### 优化数字显示格式
+- 添加 `formatNumber` 工具函数，自动去除小数尾随零（如 100.00 → 100）
+- 统一所有数值输入框的显示格式，提升用户体验
+
+### 后端优化
+
+#### 优化按比例跟单金额计算逻辑
+- 优化按比例计算的订单金额处理，使用向上取整确保满足最小限制要求
+- 对订单金额进行向上取整处理（保留 2 位小数精度）
+- 自动调整订单数量以满足最小限制要求
+- 使用 `RoundingMode.CEILING` 确保金额满足最小限制
+- 影响范围：按比例跟单的订单创建逻辑
+- 技术细节：
+  - 扩展 `BigDecimal.div()` 扩展函数，支持指定精度和舍入模式
+  - 在 `CopyOrderTrackingService` 中优化金额计算和验证逻辑
+
+#### 增强 copyRatio 精度支持
+- 将 copyRatio 字段精度从 DECIMAL(10,2) 增加到 DECIMAL(20,8)
+- 支持更精确的跟单比例设置（最小 0.01%，最大 10000%）
+- 影响的实体：CopyTrading、CopyTradingTemplate
+- 数据库迁移：新增 V18 迁移脚本，自动升级数据库字段精度
+
+## 🔧 功能优化
+
+### 移除刷新代理钱包接口
+- **移除接口**：
+  - `POST /api/accounts/refresh-proxy` - 刷新单个账户的代理地址
+  - `POST /api/accounts/refresh-all-proxies` - 刷新所有账户的代理地址
+- **原因**：代理地址应在账户导入时自动计算，无需手动刷新
+- **影响范围**：AccountController、AccountService
+- **向后兼容性**：这些接口已不再使用，移除不影响现有功能
+
+### 前端跟单比例配置优化
+- **最小比例**：从 10% 降低到 0.01%，支持更灵活的跟单比例设置
+- **最大比例**：增加到 10000%，满足大比例跟单需求
+- **显示格式**：比例模式显示为百分比（如 "100%" 而不是 "1x"）
+- **输入验证**：增强输入验证，确保比例在合理范围内
+
+## 📊 变更统计
+
+- **提交数量**：3 个提交
+- **文件变更**：15 个文件
+- **代码变更**：+575 行 / -194 行（净增加 381 行）
+
+### 详细文件变更
+
+**后端变更**：
+- `AccountController.kt` - 移除刷新代理钱包接口（-59 行）
+- `AccountService.kt` - 移除刷新代理钱包方法（-79 行）
+- `CopyTrading.kt` - 增加 copyRatio 精度
+- `CopyTradingTemplate.kt` - 增加 copyRatio 精度
+- `CopyOrderTrackingService.kt` - 优化按比例跟单金额计算逻辑（+45 行）
+- `MathExt.kt` - 扩展 div 函数支持精度和舍入模式（+20 行）
+- `V18__increase_copy_ratio_precision.sql` - 数据库迁移脚本（+14 行）
+
+**前端变更**：
+- `CopyTradingAdd.tsx` - 优化 formatter、优化比例配置（+106 行）
+- `CopyTradingEdit.tsx` - 优化 formatter、优化比例配置（+106 行）
+- `CopyTradingList.tsx` - 优化比例显示格式
+- `CopyTradingOrders/EditModal.tsx` - 优化 formatter、优化比例配置（+106 行）
+- `TemplateAdd.tsx` - 优化 formatter、优化比例配置（+65 行）
+- `TemplateEdit.tsx` - 优化 formatter、优化比例配置（+65 行）
+- `TemplateList.tsx` - 优化 formatter、优化比例配置（+65 行）
+- `utils/index.ts` - 添加 formatNumber 工具函数（+31 行）
+
+## 🔧 技术细节
+
+### 数据库变更
+- **迁移脚本**：`V18__increase_copy_ratio_precision.sql`
+- **变更内容**：
+  - `copy_trading.copy_ratio`: DECIMAL(10,2) → DECIMAL(20,8)
+  - `copy_trading_templates.copy_ratio`: DECIMAL(10,2) → DECIMAL(20,8)
+- **自动执行**：升级时会自动执行迁移脚本
+
+### API 变更
+- **移除接口**：
+  - `POST /api/accounts/refresh-proxy`
+  - `POST /api/accounts/refresh-all-proxies`
+- **无新增接口**
+
+### 前端变更
+- **工具函数**：新增 `formatNumber()` 函数，用于格式化数字显示
+- **组件更新**：所有数值输入框统一使用新的 formatter 函数
+- **显示优化**：跟单模式的比例显示为百分比格式
+
+## 📝 升级说明
+
+### 数据库升级
+本次版本包含数据库迁移脚本，升级时会自动执行：
+- 自动增加 `copy_ratio` 字段的精度
+- 现有数据不受影响，精度升级是向后兼容的
+
+### 配置变更
+无需额外配置变更。
+
+### 兼容性
+- **向后兼容**：所有变更都是向后兼容的
+- **API 兼容**：移除的接口不影响现有功能（这些接口已不再使用）
+- **数据兼容**：数据库字段精度升级不会影响现有数据
+
+## 🎯 主要改进
+
+1. **优化输入框格式化**：优化数值输入框的显示逻辑
+2. **优化跟单金额计算**：确保按比例跟单的金额满足最小限制要求
+3. **提升精度支持**：支持更精确的跟单比例设置（0.01% - 10000%）
+4. **代码清理**：移除不再使用的刷新代理钱包接口
+
+## 🔗 相关链接
+
+- [GitHub Tag](https://github.com/WrBug/PolyHermes/releases/tag/v1.1.5)
+- [变更日志](https://github.com/WrBug/PolyHermes/compare/v1.1.4...v1.1.5)
+
+## 🙏 致谢
+
+感谢所有贡献者和测试用户的反馈与支持！
+
+---
+
 # v1.1.2
 
 ## 🚀 主要功能
