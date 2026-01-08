@@ -1062,6 +1062,7 @@
     "totalAmount": "總金額",
     "totalPnl": "總盈虧",
     "statusBreakdown": "狀態",
+    "markets": "個市場",
     "fetchBuyOrdersFailed": "獲取買入訂單列表失敗",
     "fetchSellOrdersFailed": "獲取賣出訂單列表失敗",
     "fetchMatchedOrdersFailed": "獲取匹配關係列表失敗",

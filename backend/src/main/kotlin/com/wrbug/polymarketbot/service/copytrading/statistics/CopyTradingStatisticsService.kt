@@ -727,5 +727,215 @@ class CopyTradingStatisticsService(
         val currentPositionQuantity: String,
         val totalRealizedPnl: String
     )
+    
+    /**
+     * 获取按市场分组的买入订单列表
+     */
+    fun getBuyOrderListGroupedByMarket(request: MarketGroupedOrdersRequest): Result<MarketGroupedOrdersResponse> {
+        return try {
+            // 1. 验证跟单关系
+            copyTradingRepository.findById(request.copyTradingId).orElse(null)
+                ?: return Result.failure(IllegalArgumentException("跟单关系不存在: ${request.copyTradingId}"))
+            
+            // 2. 获取所有买入订单
+            var orders = copyOrderTrackingRepository.findByCopyTradingId(request.copyTradingId)
+            
+            // 3. 按市场ID分组
+            val groups = mutableMapOf<String, MutableList<CopyOrderTracking>>()
+            orders.forEach { order ->
+                val marketId = order.marketId
+                if (!groups.containsKey(marketId)) {
+                    groups[marketId] = mutableListOf()
+                }
+                groups[marketId]!!.add(order)
+            }
+            
+            // 4. 转换为分组数据并计算统计信息
+            val marketIds = groups.keys.toList()
+            val markets = marketService.getMarkets(marketIds)
+            
+            val list = marketIds.map { marketId ->
+                val marketOrders = groups[marketId] ?: mutableListOf()
+                
+                // 计算统计信息
+                val count = marketOrders.size.toLong()
+                val totalAmount = marketOrders.sumOf { order ->
+                    order.quantity.toSafeBigDecimal().multi(order.price)
+                }
+                
+                // 计算订单状态统计
+                val fullyMatchedCount = marketOrders.count { it.status == "fully_matched" }
+                val partiallyMatchedCount = marketOrders.count { it.status == "partially_matched" }
+                val filledCount = marketOrders.count { it.status == "filled" }
+                val fullyMatched = fullyMatchedCount == marketOrders.size
+                
+                val stats = MarketOrderStats(
+                    count = count,
+                    totalAmount = totalAmount.toString(),
+                    totalPnl = null,  // 买入订单没有已实现盈亏
+                    fullyMatched = fullyMatched,
+                    fullyMatchedCount = fullyMatchedCount.toLong(),
+                    partiallyMatchedCount = partiallyMatchedCount.toLong(),
+                    filledCount = filledCount.toLong()
+                )
+                
+                // 排序（按创建时间倒序）
+                marketOrders.sortByDescending { it.createdAt }
+                
+                // 转换为 DTO
+                val orderDtos = marketOrders.map { order ->
+                    val amount = order.quantity.toSafeBigDecimal().multi(order.price)
+                    val market = markets[order.marketId]
+                    BuyOrderInfo(
+                        orderId = order.buyOrderId,
+                        leaderTradeId = order.leaderBuyTradeId,
+                        marketId = order.marketId,
+                        marketTitle = market?.title,
+                        marketSlug = market?.slug,
+                        marketCategory = market?.category,
+                        side = order.side,
+                        quantity = order.quantity.toString(),
+                        price = order.price.toString(),
+                        amount = amount.toString(),
+                        matchedQuantity = order.matchedQuantity.toString(),
+                        remainingQuantity = order.remainingQuantity.toString(),
+                        status = order.status,
+                        createdAt = order.createdAt
+                    )
+                }
+                
+                MarketOrderGroup(
+                    marketId = marketId,
+                    marketTitle = markets[marketId]?.title,
+                    marketSlug = markets[marketId]?.slug,
+                    marketCategory = markets[marketId]?.category,
+                    stats = stats,
+                    orders = orderDtos as List<Any>
+                )
+            }.sortedByDescending { it.stats.count }
+            
+            // 5. 分页
+            val page = (request.page ?: 1)
+            val limit = request.limit ?: 20
+            val total = list.size.toLong()
+            
+            val start = (page - 1) * limit
+            val end = minOf(start + limit, list.size)
+            val pagedList = if (start < list.size) list.subList(start, end) else emptyList()
+            
+            val response = MarketGroupedOrdersResponse(
+                list = pagedList,
+                total = total,
+                page = page,
+                limit = limit
+            )
+            
+            Result.success(response)
+        } catch (e: Exception) {
+            logger.error("获取按市场分组的买入订单列表失败: copyTradingId=${request.copyTradingId}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 获取按市场分组的卖出订单列表
+     */
+    fun getSellOrderListGroupedByMarket(request: MarketGroupedOrdersRequest): Result<MarketGroupedOrdersResponse> {
+        return try {
+            // 1. 验证跟单关系
+            copyTradingRepository.findById(request.copyTradingId).orElse(null)
+                ?: return Result.failure(IllegalArgumentException("跟单关系不存在: ${request.copyTradingId}"))
+            
+            // 2. 获取所有卖出记录
+            val sellRecords = sellMatchRecordRepository.findByCopyTradingId(request.copyTradingId)
+            
+            // 3. 按市场ID分组
+            val groups = mutableMapOf<String, MutableList<SellMatchRecord>>()
+            sellRecords.forEach { record ->
+                val marketId = record.marketId
+                if (!groups.containsKey(marketId)) {
+                    groups[marketId] = mutableListOf()
+                }
+                groups[marketId]!!.add(record)
+            }
+            
+            // 4. 转换为分组数据并计算统计信息
+            val marketIds = groups.keys.toList()
+            val markets = marketService.getMarkets(marketIds)
+            
+            val list = marketIds.map { marketId ->
+                val marketRecords = groups[marketId] ?: mutableListOf()
+                
+                // 计算统计信息
+                val count = marketRecords.size.toLong()
+                val totalAmount = marketRecords.sumOf { record ->
+                    record.totalMatchedQuantity.toSafeBigDecimal().multi(record.sellPrice)
+                }
+                val totalPnl = marketRecords.sumOf { it.totalRealizedPnl.toSafeBigDecimal() }
+                
+                val stats = MarketOrderStats(
+                    count = count,
+                    totalAmount = totalAmount.toString(),
+                    totalPnl = totalPnl.toString(),
+                    fullyMatched = true,  // 卖出订单都是已成交的
+                    fullyMatchedCount = count,  // 所有订单都是已成交的
+                    partiallyMatchedCount = 0L,
+                    filledCount = 0L
+                )
+                
+                // 排序（按创建时间倒序）
+                marketRecords.sortByDescending { it.createdAt }
+                
+                // 转换为 DTO
+                val orderDtos = marketRecords.map { record ->
+                    val amount = record.totalMatchedQuantity.toSafeBigDecimal().multi(record.sellPrice)
+                    val market = markets[record.marketId]
+                    SellOrderInfo(
+                        orderId = record.sellOrderId,
+                        leaderTradeId = record.leaderSellTradeId,
+                        marketId = record.marketId,
+                        marketTitle = market?.title,
+                        marketSlug = market?.slug,
+                        marketCategory = market?.category,
+                        side = record.side,
+                        quantity = record.totalMatchedQuantity.toString(),
+                        price = record.sellPrice.toString(),
+                        amount = amount.toString(),
+                        realizedPnl = record.totalRealizedPnl.toString(),
+                        createdAt = record.createdAt
+                    )
+                }
+                
+                MarketOrderGroup(
+                    marketId = marketId,
+                    marketTitle = markets[marketId]?.title,
+                    marketSlug = markets[marketId]?.slug,
+                    marketCategory = markets[marketId]?.category,
+                    stats = stats,
+                    orders = orderDtos as List<Any>
+                )
+            }.sortedByDescending { it.stats.count }
+            
+            // 5. 分页
+            val page = (request.page ?: 1)
+            val limit = request.limit ?: 20
+            val total = list.size.toLong()
+            
+            val start = (page - 1) * limit
+            val end = minOf(start + limit, list.size)
+            val pagedList = if (start < list.size) list.subList(start, end) else emptyList()
+            
+            val response = MarketGroupedOrdersResponse(
+                list = pagedList,
+                total = total,
+                page = page,
+                limit = limit
+            )
+            
+            Result.success(response)
+        } catch (e: Exception) {
+            logger.error("获取按市场分组的卖出订单列表失败: copyTradingId=${request.copyTradingId}", e)
+            Result.failure(e)
+        }
+    }
 }
-

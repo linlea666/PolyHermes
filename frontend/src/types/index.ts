@@ -701,6 +701,51 @@ export interface OrderTrackingRequest {
 }
 
 /**
+ * 按市场分组的订单查询请求
+ */
+export interface MarketGroupedOrdersRequest {
+  copyTradingId: number
+  type: 'buy' | 'sell'
+  page?: number
+  limit?: number
+}
+
+/**
+ * 单个市场的订单统计信息
+ */
+export interface MarketOrderStats {
+  count: number
+  totalAmount: string  // 总金额
+  totalPnl?: string  // 总盈亏（买入订单未实现盈亏，此字段为空）
+  fullyMatched: boolean  // 是否全部成交
+  fullyMatchedCount: number  // 完全成交的订单数
+  partiallyMatchedCount: number  // 部分成交的订单数
+  filledCount: number  // 未成交的订单数
+}
+
+/**
+ * 单个市场分组的响应数据
+ */
+export interface MarketOrderGroup {
+  marketId: string
+  marketTitle?: string
+  marketSlug?: string
+  marketCategory?: string
+  stats: MarketOrderStats
+  orders: BuyOrderInfo[] | SellOrderInfo[]  // 订单列表
+}
+
+/**
+ * 按市场分组的订单列表响应
+ */
+export interface MarketGroupedOrdersResponse {
+  list: MarketOrderGroup[]
+  total: number  // 市场总数
+  page: number
+  limit: number
+}
+
+/**
  * 被过滤订单信息
  */
 export interface FilteredOrder {

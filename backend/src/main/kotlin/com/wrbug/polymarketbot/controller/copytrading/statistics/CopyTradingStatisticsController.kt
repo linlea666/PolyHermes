@@ -200,5 +200,51 @@ class CopyOrderTrackingController(
             ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ORDER_TRACKING_LIST_FETCH_FAILED, e.message, messageSource))
         }
     }
+    
+    /**
+     * 查询按市场分组的订单列表（买入/卖出）
+     * POST /api/copy-trading/orders/grouped-by-market
+     */
+    @PostMapping("/grouped-by-market")
+    fun getOrderListGroupedByMarket(@RequestBody request: MarketGroupedOrdersRequest): ResponseEntity<ApiResponse<MarketGroupedOrdersResponse>> {
+        return try {
+            if (request.copyTradingId <= 0) {
+                return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_COPY_TRADING_ID_INVALID, messageSource = messageSource))
+            }
+            
+            if (request.type.isBlank()) {
+                return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, "订单类型不能为空", messageSource))
+            }
+            
+            val validTypes = listOf("buy", "sell")
+            if (!validTypes.contains(request.type.lowercase())) {
+                return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_ERROR, "订单类型必须是 buy 或 sell", messageSource))
+            }
+            
+            val result: Result<MarketGroupedOrdersResponse> = runBlocking {
+                when (request.type.lowercase()) {
+                    "buy" -> statisticsService.getBuyOrderListGroupedByMarket(request)
+                    "sell" -> statisticsService.getSellOrderListGroupedByMarket(request)
+                    else -> Result.failure(IllegalArgumentException("不支持的订单类型: ${request.type}"))
+                }
+            }
+            
+            result.fold(
+                onSuccess = { response: MarketGroupedOrdersResponse ->
+                    ResponseEntity.ok(ApiResponse.success(response))
+                },
+                onFailure = { e: Throwable ->
+                    logger.error("查询按市场分组的订单列表失败: copyTradingId=${request.copyTradingId}, type=${request.type}", e)
+                    when (e) {
+                        is IllegalArgumentException -> ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_ERROR, e.message, messageSource))
+                        else -> ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ORDER_TRACKING_LIST_FETCH_FAILED, e.message, messageSource))
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            logger.error("查询按市场分组的订单列表异常: copyTradingId=${request.copyTradingId}, type=${request.type}", e)
+            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ORDER_TRACKING_LIST_FETCH_FAILED, e.message, messageSource))
+        }
+    }
 }
 

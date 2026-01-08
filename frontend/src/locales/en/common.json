@@ -1062,6 +1062,7 @@
     "totalAmount": "Total Amount",
     "totalPnl": "Total PnL",
     "statusBreakdown": "Status",
+    "markets": "markets",
     "fetchBuyOrdersFailed": "Failed to fetch buy orders",
     "fetchSellOrdersFailed": "Failed to fetch sell orders",
     "fetchMatchedOrdersFailed": "Failed to fetch matched orders",
