@@ -68,6 +68,9 @@ dependencies {
     // Logging
     implementation("org.slf4j:slf4j-api")
     
+    // Caffeine Cache (LRU)
+    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+    
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")

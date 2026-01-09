@@ -472,7 +472,13 @@ export const apiService = {
      * 查询订单列表（买入/卖出/匹配）
      */
     list: (data: any) => 
-      apiClient.post<ApiResponse<any>>('/copy-trading/orders/tracking', data)
+      apiClient.post<ApiResponse<any>>('/copy-trading/orders/tracking', data),
+    
+    /**
+     * 查询按市场分组的订单列表（买入/卖出）
+     */
+    listGroupedByMarket: (data: any) =>
+      apiClient.post<ApiResponse<any>>('/copy-trading/orders/grouped-by-market', data)
   },
   
   /**

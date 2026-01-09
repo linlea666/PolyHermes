@@ -19,6 +19,7 @@ import com.wrbug.polymarketbot.service.copytrading.configs.CopyTradingFilterServ
 import com.wrbug.polymarketbot.service.copytrading.configs.FilterStatus
 import com.wrbug.polymarketbot.service.copytrading.orders.OrderSigningService
 import com.wrbug.polymarketbot.service.common.BlockchainService
+import com.wrbug.polymarketbot.service.common.MarketService
 import com.wrbug.polymarketbot.service.common.PolymarketClobService
 import com.wrbug.polymarketbot.service.system.TelegramNotificationService
 import com.wrbug.polymarketbot.util.CryptoUtils
@@ -48,6 +49,7 @@ open class CopyOrderTrackingService(
     private val clobService: PolymarketClobService,
     private val retrofitFactory: RetrofitFactory,
     private val cryptoUtils: CryptoUtils,
+    private val marketService: MarketService,  // 市场信息服务
     private val telegramNotificationService: TelegramNotificationService? = null  // 可选，避免循环依赖
 ) {
 
@@ -122,13 +124,14 @@ open class CopyOrderTrackingService(
     suspend fun processTrade(leaderId: Long, trade: TradeResponse, source: String): Result<Unit> {
         // 获取该交易的 Mutex（按交易ID锁定，不同交易可以并行处理）
         val mutex = getMutex(leaderId, trade.id)
-
+        logger.debug("processTrade: ${trade.id}, $source")
         return mutex.withLock {
             try {
                 // 1. 检查是否已处理（去重，包括失败状态）
                 val existingProcessed = processedTradeRepository.findByLeaderIdAndLeaderTradeId(leaderId, trade.id)
 
                 if (existingProcessed != null) {
+                    logger.debug("processTrade: 重复 ${trade.id}, $source")
                     if (existingProcessed.status == "FAILED") {
                         return@withLock Result.success(Unit)
                     }
@@ -264,16 +267,36 @@ open class CopyOrderTrackingService(
                     // 计算跟单金额（USDC）= 买入数量 × 价格
                     val copyOrderAmount = buyQuantity.multi(tradePrice)
 
+                    // 如果启用了关键字过滤或市场截止时间过滤，需要先获取市场信息
+                    var marketTitle: String? = null
+                    var marketEndDate: Long? = null
+                    val needMarketInfo =
+                        copyTrading.keywordFilterMode != "DISABLED" || copyTrading.maxMarketEndDate != null
+
+                    if (needMarketInfo) {
+                        try {
+                            val market = marketService.getMarket(trade.market)
+                            marketTitle = market?.title
+                            marketEndDate = market?.endDate
+                        } catch (e: Exception) {
+                            logger.warn("获取市场信息失败（关键字过滤/市场截止时间检查需要）: ${e.message}", e)
+                        }
+                    }
+
                     // 过滤条件检查（在计算订单参数之前）
                     // 传入 Leader 交易价格，用于价格区间检查
                     // 传入跟单金额和市场ID，用于仓位检查（按市场检查仓位）
+                    // 传入市场标题，用于关键字过滤
+                    // 传入市场截止时间，用于市场截止时间检查
                     // 订单簿只请求一次，返回给后续逻辑使用
                     val filterResult = filterService.checkFilters(
                         copyTrading,
                         tokenId,
                         tradePrice = tradePrice,
                         copyOrderAmount = copyOrderAmount,
-                        marketId = trade.market
+                        marketId = trade.market,
+                        marketTitle = marketTitle,
+                        marketEndDate = marketEndDate
                     )
                     val orderbook = filterResult.orderbook  // 获取订单簿（如果需要）
                     if (!filterResult.isPassed) {
@@ -283,23 +306,9 @@ open class CopyOrderTrackingService(
                         notificationScope.launch {
                             try {
                                 // 获取市场信息（标题和slug）
-                                val marketInfo = withContext(Dispatchers.IO) {
-                                    try {
-                                        val gammaApi = retrofitFactory.createGammaApi()
-                                        val marketResponse = gammaApi.listMarkets(conditionIds = listOf(trade.market))
-                                        if (marketResponse.isSuccessful && marketResponse.body() != null) {
-                                            marketResponse.body()!!.firstOrNull()
-                                        } else {
-                                            null
-                                        }
-                                    } catch (e: Exception) {
-                                        logger.warn("获取市场信息失败: ${e.message}", e)
-                                        null
-                                    }
-                                }
-
-                                val marketTitle = marketInfo?.question ?: trade.market
-                                val marketSlug = marketInfo?.slug
+                                val market = marketService.getMarket(trade.market)
+                                val marketTitle = market?.title ?: trade.market
+                                val marketSlug = market?.slug  // 显示用的 slug
 
                                 // 从过滤结果中提取 filterType
                                 val filterType = extractFilterType(filterResult.status, filterResult.reason)
@@ -554,24 +563,9 @@ open class CopyOrderTrackingService(
                             notificationScope.launch {
                                 try {
                                     // 获取市场信息（标题和slug）
-                                    val marketInfo = withContext(Dispatchers.IO) {
-                                        try {
-                                            val gammaApi = retrofitFactory.createGammaApi()
-                                            val marketResponse =
-                                                gammaApi.listMarkets(conditionIds = listOf(trade.market))
-                                            if (marketResponse.isSuccessful && marketResponse.body() != null) {
-                                                marketResponse.body()!!.firstOrNull()
-                                            } else {
-                                                null
-                                            }
-                                        } catch (e: Exception) {
-                                            logger.warn("获取市场信息失败: ${e.message}", e)
-                                            null
-                                        }
-                                    }
-
-                                    val marketTitle = marketInfo?.question ?: trade.market
-                                    val marketSlug = marketInfo?.slug
+                                    val market = marketService.getMarket(trade.market)
+                                    val marketTitle = market?.title ?: trade.market
+                                    val marketSlug = market?.eventSlug  // 跳转用的 slug
 
                                     // 获取当前语言设置（从 LocaleContextHolder）
                                     val locale = try {
@@ -1416,6 +1410,8 @@ open class CopyOrderTrackingService(
             FilterStatus.FAILED_ORDER_DEPTH -> "ORDER_DEPTH"
             FilterStatus.FAILED_MAX_POSITION_VALUE -> "MAX_POSITION_VALUE"
             FilterStatus.FAILED_MAX_POSITION_COUNT -> "MAX_POSITION_COUNT"
+            FilterStatus.FAILED_KEYWORD_FILTER -> "KEYWORD_FILTER"
+            FilterStatus.FAILED_MARKET_END_DATE -> "MARKET_END_DATE"
         }
     }
 

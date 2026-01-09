@@ -1,7 +1,6 @@
 package com.wrbug.polymarketbot.service.copytrading.orders
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.wrbug.polymarketbot.api.MarketResponse
 import com.wrbug.polymarketbot.dto.OrderDetailDto
 import com.wrbug.polymarketbot.dto.OrderMessageDto
 import com.wrbug.polymarketbot.dto.OrderPushMessage
@@ -19,6 +18,7 @@ import com.wrbug.polymarketbot.util.CryptoUtils
 import com.wrbug.polymarketbot.repository.CopyOrderTrackingRepository
 import com.wrbug.polymarketbot.repository.CopyTradingRepository
 import com.wrbug.polymarketbot.repository.LeaderRepository
+import com.wrbug.polymarketbot.service.common.MarketService
 import org.springframework.stereotype.Service
 import java.util.concurrent.ConcurrentHashMap
 
@@ -35,7 +35,8 @@ class OrderPushService(
     private val cryptoUtils: CryptoUtils,
     private val copyOrderTrackingRepository: CopyOrderTrackingRepository? = null,  // 可选，避免循环依赖
     private val copyTradingRepository: CopyTradingRepository? = null,  // 可选，避免循环依赖
-    private val leaderRepository: LeaderRepository? = null  // 可选，避免循环依赖
+    private val leaderRepository: LeaderRepository? = null,  // 可选，避免循环依赖
+    private val marketService: MarketService  // 市场信息服务
 ) {
 
     private val logger = LoggerFactory.getLogger(OrderPushService::class.java)
@@ -422,8 +423,8 @@ class OrderPushService(
             
             result.fold(
                 onSuccess = { openOrder ->
-                    // 获取市场信息（通过 Gamma API）
-                    val marketInfo = fetchMarketInfo(conditionId ?: openOrder.market)
+                    // 获取市场信息（使用 MarketService，优先从数据库/缓存获取）
+                    val market = marketService.getMarket(conditionId ?: openOrder.market)
 
                     // 转换为 DTO
                     // 注意：createdAt 是 unix timestamp (Long)，需要转换为字符串
@@ -436,9 +437,9 @@ class OrderPushService(
                         filled = openOrder.sizeMatched,  // 使用 size_matched
                         status = openOrder.status,
                         createdAt = openOrder.createdAt.toString(),  // unix timestamp 转换为字符串
-                        marketName = marketInfo?.question,
-                        marketSlug = marketInfo?.slug,
-                        marketIcon = marketInfo?.icon
+                        marketName = market?.title,
+                        marketSlug = market?.slug,  // 显示用的 slug
+                        marketIcon = market?.icon
                     )
                 },
                 onFailure = { e ->
@@ -448,40 +449,6 @@ class OrderPushService(
             )
         } catch (e: Exception) {
             logger.error("获取订单详情异常: account=${account.id}, orderId=$orderId, ${e.message}", e)
-            null
-        }
-    }
-
-    /**
-     * 获取市场信息（通过 Gamma API）
-     * 文档: https://docs.polymarket.com/api-reference/markets/list-markets
-     *
-     * 使用 /markets 接口，通过 condition_ids 查询参数获取市场信息
-     * 订单返回的 market 字段是 16 进制的 condition ID（如 "0x..."）
-     */
-    private suspend fun fetchMarketInfo(conditionId: String): MarketResponse? {
-        return try {
-            // 创建 Gamma API 客户端（公开 API，不需要认证）
-            val gammaApi = retrofitFactory.createGammaApi()
-
-            // 调用 Gamma API 获取市场信息
-            // 使用 /markets 接口，通过 condition_ids 查询参数
-            val response = gammaApi.listMarkets(
-                conditionIds = listOf(conditionId),
-                includeTag = null
-            )
-            if (response.isSuccessful && response.body() != null) {
-                val markets = response.body()!!
-                if (markets.isNotEmpty()) {
-                    val market = markets.first()
-                    return market
-                } else {
-                    return null
-                }
-            } else {
-                null
-            }
-        } catch (e: Exception) {
             null
         }
     }

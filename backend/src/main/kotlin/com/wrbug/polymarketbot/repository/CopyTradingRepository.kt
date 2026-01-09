@@ -21,12 +21,12 @@ interface CopyTradingRepository : JpaRepository<CopyTrading, Long> {
     fun findByLeaderId(leaderId: Long): List<CopyTrading>
     
     /**
-     * 根据账户ID和Leader ID查找跟单
+     * 根据账户ID和Leader ID查找跟单列表
      */
     fun findByAccountIdAndLeaderId(
         accountId: Long,
         leaderId: Long
-    ): CopyTrading?
+    ): List<CopyTrading>
     
     /**
      * 查找所有启用的跟单

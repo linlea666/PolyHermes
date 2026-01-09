@@ -62,6 +62,19 @@ class PositionCheckService(
     // 记录已发送提示的配置（避免重复推送）
     private val notifiedConfigs = ConcurrentHashMap<Long, Long>()  // accountId/copyTradingId -> lastNotificationTime
     
+    // 待检查的仓位记录（延迟检测机制）
+    // key: "accountId_marketId_outcomeIndex_copyTradingId"
+    // value: PendingPositionCheck（包含订单列表和首次检测时间）
+    private data class PendingPositionCheck(
+        val accountId: Long,
+        val marketId: String,
+        val outcomeIndex: Int,
+        val copyTradingId: Long,
+        val orders: List<CopyOrderTracking>,
+        val firstDetectedTime: Long  // 首次检测到仓位不存在的时间
+    )
+    private val pendingPositionChecks = ConcurrentHashMap<String, PendingPositionCheck>()
+    
     // 同步锁，确保订阅任务的启动和停止是线程安全的
     private val lock = Any()
     
@@ -73,6 +86,7 @@ class PositionCheckService(
         logger.info("PositionCheckService 初始化，订阅仓位轮训事件")
         startSubscription()
         startCacheCleanup()
+        startPendingPositionCheckTask()
     }
     
     /**
@@ -133,6 +147,121 @@ class PositionCheckService(
     }
     
     /**
+     * 启动待检查仓位的定期检查任务
+     * 每30秒检查一次，如果超过3分钟且确实不存在，则标记为已卖出
+     */
+    private fun startPendingPositionCheckTask() {
+        scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                try {
+                    delay(30000)  // 每30秒检查一次
+                    checkPendingPositions()
+                } catch (e: Exception) {
+                    logger.error("检查待检查仓位异常: ${e.message}", e)
+                }
+            }
+        }
+    }
+    
+    /**
+     * 检查待检查的仓位
+     * 如果超过3分钟且确实不存在，则标记为已卖出
+     * 如果存在，则删除记录
+     */
+    private suspend fun checkPendingPositions() {
+        if (pendingPositionChecks.isEmpty()) {
+            return
+        }
+        
+        try {
+            // 获取最新的仓位数据
+            val result = accountService.getAllPositions()
+            if (result.isFailure) {
+                logger.warn("获取仓位数据失败，跳过待检查仓位验证: ${result.exceptionOrNull()?.message}")
+                return
+            }
+            
+            val positionListResponse = result.getOrNull() ?: return
+            val currentPositions = positionListResponse.currentPositions
+            
+            // 按账户和市场分组当前仓位
+            val positionsByAccountAndMarket = currentPositions.groupBy { 
+                "${it.accountId}_${it.marketId}_${it.outcomeIndex ?: 0}"
+            }
+            
+            val now = System.currentTimeMillis()
+            val checkDelay = 180000L  // 3分钟 = 180000毫秒
+            val toRemove = mutableListOf<String>()
+            val toMarkAsSold = mutableListOf<PendingPositionCheck>()
+            
+            // 遍历所有待检查的仓位
+            for ((key, pendingCheck) in pendingPositionChecks) {
+                // 先过滤出仍然有效的订单（remainingQuantity > 0）
+                val validOrders = pendingCheck.orders.filter { order ->
+                    // 重新从数据库查询订单状态，确保数据是最新的
+                    val currentOrder = copyOrderTrackingRepository.findById(order.id!!).orElse(null)
+                    currentOrder != null && currentOrder.remainingQuantity > BigDecimal.ZERO
+                }
+                
+                // 如果没有有效订单了，删除记录
+                if (validOrders.isEmpty()) {
+                    toRemove.add(key)
+                    logger.info("待检查仓位的订单已全部处理，删除记录: marketId=${pendingCheck.marketId}, outcomeIndex=${pendingCheck.outcomeIndex}, accountId=${pendingCheck.accountId}, copyTradingId=${pendingCheck.copyTradingId}")
+                    continue
+                }
+                
+                val positionKey = "${pendingCheck.accountId}_${pendingCheck.marketId}_${pendingCheck.outcomeIndex}"
+                val position = positionsByAccountAndMarket[positionKey]?.firstOrNull()
+                
+                if (position != null) {
+                    // 仓位存在，删除记录
+                    toRemove.add(key)
+                    logger.info("待检查仓位已恢复，删除记录: marketId=${pendingCheck.marketId}, outcomeIndex=${pendingCheck.outcomeIndex}, accountId=${pendingCheck.accountId}, copyTradingId=${pendingCheck.copyTradingId}, elapsedTime=${now - pendingCheck.firstDetectedTime}ms")
+                } else {
+                    // 仓位不存在，检查是否超过3分钟
+                    val elapsedTime = now - pendingCheck.firstDetectedTime
+                    if (elapsedTime >= checkDelay) {
+                        // 超过3分钟且确实不存在，标记为已卖出（使用有效订单）
+                        toMarkAsSold.add(pendingCheck.copy(orders = validOrders))
+                        toRemove.add(key)
+                        logger.info("待检查仓位超过3分钟仍不存在，标记为已卖出: marketId=${pendingCheck.marketId}, outcomeIndex=${pendingCheck.outcomeIndex}, accountId=${pendingCheck.accountId}, copyTradingId=${pendingCheck.copyTradingId}, elapsedTime=${elapsedTime}ms, validOrderCount=${validOrders.size}, originalOrderCount=${pendingCheck.orders.size}")
+                    } else {
+                        // 未超过3分钟，更新订单列表（移除已处理的订单）
+                        if (validOrders.size < pendingCheck.orders.size) {
+                            pendingPositionChecks[key] = pendingCheck.copy(orders = validOrders)
+                            logger.debug("更新待检查仓位记录，移除已处理的订单: marketId=${pendingCheck.marketId}, outcomeIndex=${pendingCheck.outcomeIndex}, validOrderCount=${validOrders.size}, originalOrderCount=${pendingCheck.orders.size}")
+                        }
+                        logger.debug("待检查仓位仍不存在，继续等待: marketId=${pendingCheck.marketId}, outcomeIndex=${pendingCheck.outcomeIndex}, accountId=${pendingCheck.accountId}, copyTradingId=${pendingCheck.copyTradingId}, elapsedTime=${elapsedTime}ms, remainingTime=${checkDelay - elapsedTime}ms")
+                    }
+                }
+            }
+            
+            // 删除已恢复或已处理的记录
+            toRemove.forEach { key ->
+                pendingPositionChecks.remove(key)
+            }
+            
+            // 标记为已卖出
+            for (pendingCheck in toMarkAsSold) {
+                try {
+                    val currentPrice = getCurrentMarketPrice(pendingCheck.marketId, pendingCheck.outcomeIndex)
+                    updateOrdersAsSold(
+                        pendingCheck.orders,
+                        currentPrice,
+                        pendingCheck.copyTradingId,
+                        pendingCheck.marketId,
+                        pendingCheck.outcomeIndex
+                    )
+                } catch (e: Exception) {
+                    logger.error("标记待检查仓位为已卖出失败: marketId=${pendingCheck.marketId}, outcomeIndex=${pendingCheck.outcomeIndex}, error=${e.message}", e)
+                }
+            }
+        } catch (e: Exception) {
+            logger.error("检查待检查仓位异常: ${e.message}", e)
+        }
+    }
+    
+    /**
      * 清理过期的缓存条目（超过2小时的记录）
      */
     private fun cleanupExpiredCache() {
@@ -163,8 +292,16 @@ class PositionCheckService(
             notifiedConfigs.remove(key)
         }
         
-        if (expiredPositions.isNotEmpty() || expiredProcessed.isNotEmpty() || expiredConfigs.isNotEmpty()) {
-            logger.debug("清理过期缓存: positions=${expiredPositions.size}, processed=${expiredProcessed.size}, configs=${expiredConfigs.size}")
+        // 清理过期的待检查仓位记录（超过1小时的记录，正常情况下应该在3分钟内处理完）
+        val expiredPendingChecks = pendingPositionChecks.entries.filter { (_, check) ->
+            (now - check.firstDetectedTime) > 3600000  // 1小时
+        }
+        expiredPendingChecks.forEach { (key, _) ->
+            pendingPositionChecks.remove(key)
+        }
+        
+        if (expiredPositions.isNotEmpty() || expiredProcessed.isNotEmpty() || expiredConfigs.isNotEmpty() || expiredPendingChecks.isNotEmpty()) {
+            logger.debug("清理过期缓存: positions=${expiredPositions.size}, processed=${expiredProcessed.size}, configs=${expiredConfigs.size}, pendingChecks=${expiredPendingChecks.size}")
         }
     }
     
@@ -371,31 +508,48 @@ class PositionCheckService(
                     val position = positionsByAccountAndMarket[positionKey]?.firstOrNull()
                     
                     if (position == null) {
-                        // 仓位不存在，检查订单创建时间
-                        // 只有当订单创建时间超过2分钟时，才认为仓位被出售了
-                        // 这样可以避免刚创建的订单因为API延迟而被误判为已卖出
+                        // 仓位不存在，使用延迟检测机制
+                        // 先检查订单创建时间，只有超过2分钟的订单才进入延迟检测
                         val now = System.currentTimeMillis()
-                        val ordersToMarkAsSold = orders.filter { order ->
+                        val ordersToCheck = orders.filter { order ->
                             val orderAge = now - order.createdAt
                             orderAge > 120000  // 2分钟 = 120000毫秒
                         }
                         
-                        if (ordersToMarkAsSold.isNotEmpty()) {
-                            // 有订单创建时间超过2分钟，认为仓位已被出售
-                            try {
-                            val currentPrice = getCurrentMarketPrice(marketId, outcomeIndex)
-                            updateOrdersAsSold(ordersToMarkAsSold, currentPrice, copyTrading.id, marketId, outcomeIndex)
-                            logger.debug("仓位不存在且订单创建时间超过2分钟，标记为已卖出: marketId=$marketId, outcomeIndex=$outcomeIndex, orderCount=${ordersToMarkAsSold.size}")
-                            } catch (e: Exception) {
-                                logger.warn("无法获取市场价格，跳过标记为已卖出: marketId=$marketId, outcomeIndex=$outcomeIndex, error=${e.message}")
-                                // 无法获取价格时，跳过该市场的处理，等待下次检查时再试
-                                continue
+                        if (ordersToCheck.isNotEmpty()) {
+                            // 有订单创建时间超过2分钟，记录到待检查列表
+                            val checkKey = "${copyTrading.accountId}_${marketId}_${outcomeIndex}_${copyTrading.id}"
+                            
+                            // 如果已经存在记录，更新订单列表（可能订单状态有变化）
+                            val existingCheck = pendingPositionChecks[checkKey]
+                            if (existingCheck == null) {
+                                // 首次检测到，记录
+                                pendingPositionChecks[checkKey] = PendingPositionCheck(
+                                    accountId = copyTrading.accountId,
+                                    marketId = marketId,
+                                    outcomeIndex = outcomeIndex,
+                                    copyTradingId = copyTrading.id!!,
+                                    orders = ordersToCheck,
+                                    firstDetectedTime = now
+                                )
+                                logger.info("首次检测到仓位不存在，记录待检查: marketId=$marketId, outcomeIndex=$outcomeIndex, accountId=${copyTrading.accountId}, copyTradingId=${copyTrading.id}, orderCount=${ordersToCheck.size}, positionKey=$positionKey")
+                            } else {
+                                // 已存在记录，更新订单列表（可能订单状态有变化）
+                                pendingPositionChecks[checkKey] = existingCheck.copy(orders = ordersToCheck)
+                                logger.debug("更新待检查仓位记录: marketId=$marketId, outcomeIndex=$outcomeIndex, accountId=${copyTrading.accountId}, copyTradingId=${copyTrading.id}, orderCount=${ordersToCheck.size}, elapsedTime=${now - existingCheck.firstDetectedTime}ms")
                             }
                         } else {
                             // 订单创建时间不足2分钟，可能是刚创建的订单，暂时不处理
-                            logger.debug("仓位不存在但订单创建时间不足2分钟，暂不标记为已卖出: marketId=$marketId, outcomeIndex=$outcomeIndex, orderCount=${orders.size}, oldestOrderAge=${orders.minOfOrNull { now - it.createdAt }?.let { "${it}ms" } ?: "N/A"}")
+                            logger.debug("仓位不存在但订单创建时间不足2分钟，暂不标记为已卖出: marketId=$marketId, outcomeIndex=$outcomeIndex, orderCount=${orders.size}, oldestOrderAge=${orders.minOfOrNull { now - it.createdAt }?.let { "${it}ms" } ?: "N/A"}, positionKey=$positionKey")
                         }
                     } else {
+                        // 有仓位，先检查是否有对应的待检查记录，如果有则删除（仓位已恢复）
+                        val checkKey = "${copyTrading.accountId}_${marketId}_${outcomeIndex}_${copyTrading.id}"
+                        val pendingCheck = pendingPositionChecks.remove(checkKey)
+                        if (pendingCheck != null) {
+                            logger.info("仓位已恢复，删除待检查记录: marketId=$marketId, outcomeIndex=$outcomeIndex, accountId=${copyTrading.accountId}, copyTradingId=${copyTrading.id}, elapsedTime=${System.currentTimeMillis() - pendingCheck.firstDetectedTime}ms")
+                        }
+                        
                         // 有仓位，按订单下单顺序（FIFO）更新状态
                         // 计算逻辑：
                          // 1. 总订单数量 = 所有未卖出订单的剩余数量总和

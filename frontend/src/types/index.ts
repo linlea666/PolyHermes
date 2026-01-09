@@ -210,9 +210,13 @@ export interface CopyTrading {
   // 最大仓位配置
   maxPositionValue?: string  // 最大仓位金额（USDC），NULL表示不启用
   maxPositionCount?: number  // 最大仓位数量，NULL表示不启用
+  // 关键字过滤配置
+  keywordFilterMode?: 'DISABLED' | 'WHITELIST' | 'BLACKLIST'  // 关键字过滤模式
+  keywords?: string[]  // 关键字列表，当keywordFilterMode为DISABLED时为null
   // 新增配置字段
   configName?: string  // 配置名（可选，但提供时必须非空）
   pushFailedOrders: boolean  // 推送失败订单（默认关闭）
+  maxMarketEndDate?: number  // 市场截止时间限制（毫秒时间戳），仅跟单截止时间小于此时间的订单，NULL表示不启用
   createdAt: number
   updatedAt: number
 }
@@ -256,9 +260,13 @@ export interface CopyTradingCreateRequest {
   // 最大仓位配置
   maxPositionValue?: string  // 最大仓位金额（USDC），NULL表示不启用
   maxPositionCount?: number  // 最大仓位数量，NULL表示不启用
+  // 关键字过滤配置
+  keywordFilterMode?: 'DISABLED' | 'WHITELIST' | 'BLACKLIST'  // 关键字过滤模式
+  keywords?: string[]  // 关键字列表，当keywordFilterMode为DISABLED时为null
   // 新增配置字段
   configName?: string  // 配置名（可选，但提供时必须非空）
   pushFailedOrders?: boolean  // 推送失败订单（可选）
+  maxMarketEndDate?: number  // 市场截止时间限制（毫秒时间戳），仅跟单截止时间小于此时间的订单，NULL表示不启用
 }
 
 /**
@@ -290,9 +298,13 @@ export interface CopyTradingUpdateRequest {
   // 最大仓位配置
   maxPositionValue?: string  // 最大仓位金额（USDC），NULL表示不启用
   maxPositionCount?: number  // 最大仓位数量，NULL表示不启用
+  // 关键字过滤配置
+  keywordFilterMode?: 'DISABLED' | 'WHITELIST' | 'BLACKLIST'  // 关键字过滤模式
+  keywords?: string[]  // 关键字列表，当keywordFilterMode为DISABLED时为null
   // 新增配置字段
   configName?: string  // 配置名（可选，但提供时必须非空）
   pushFailedOrders?: boolean  // 推送失败订单（可选）
+  maxMarketEndDate?: number  // 市场截止时间限制（毫秒时间戳），仅跟单截止时间小于此时间的订单，NULL表示不启用
 }
 
 /**
@@ -372,7 +384,8 @@ export interface AccountPosition {
   proxyAddress: string
   marketId: string
   marketTitle?: string
-  marketSlug?: string
+  marketSlug?: string  // 显示用的 slug
+  eventSlug?: string  // 跳转用的 slug（从 events[0].slug 获取）
   marketIcon?: string  // 市场图标 URL
   side: string  // 结果名称（如 "YES", "NO", "Pakistan" 等）
   outcomeIndex?: number  // 结果索引（0, 1, 2...），用于计算 tokenId
@@ -627,6 +640,10 @@ export interface BuyOrderInfo {
   orderId: string
   leaderTradeId: string
   marketId: string
+  marketTitle?: string  // 市场名称
+  marketSlug?: string  // 市场 slug（用于显示）
+  eventSlug?: string  // 跳转用的 slug（从 events[0].slug 获取）
+  marketCategory?: string  // 市场分类（sports, crypto 等）
   side: string
   quantity: string
   price: string
@@ -644,6 +661,10 @@ export interface SellOrderInfo {
   orderId: string
   leaderTradeId: string
   marketId: string
+  marketTitle?: string  // 市场名称
+  marketSlug?: string  // 市场 slug（用于显示）
+  eventSlug?: string  // 跳转用的 slug（从 events[0].slug 获取）
+  marketCategory?: string  // 市场分类（sports, crypto 等）
   side: string
   quantity: string
   price: string
@@ -658,6 +679,11 @@ export interface SellOrderInfo {
 export interface MatchedOrderInfo {
   sellOrderId: string
   buyOrderId: string
+  marketId?: string  // 市场ID
+  marketTitle?: string  // 市场名称
+  marketSlug?: string  // 市场 slug（用于显示）
+  eventSlug?: string  // 跳转用的 slug（从 events[0].slug 获取）
+  marketCategory?: string  // 市场分类（sports, crypto 等）
   matchedQuantity: string
   buyPrice: string
   sellPrice: string
@@ -688,6 +714,52 @@ export interface OrderTrackingRequest {
   status?: string
   sellOrderId?: string
   buyOrderId?: string
+}
+
+/**
+ * 按市场分组的订单查询请求
+ */
+export interface MarketGroupedOrdersRequest {
+  copyTradingId: number
+  type: 'buy' | 'sell'
+  page?: number
+  limit?: number
+}
+
+/**
+ * 单个市场的订单统计信息
+ */
+export interface MarketOrderStats {
+  count: number
+  totalAmount: string  // 总金额
+  totalPnl?: string  // 总盈亏（买入订单未实现盈亏，此字段为空）
+  fullyMatched: boolean  // 是否全部成交
+  fullyMatchedCount: number  // 完全成交的订单数
+  partiallyMatchedCount: number  // 部分成交的订单数
+  filledCount: number  // 未成交的订单数
+}
+
+/**
+ * 单个市场分组的响应数据
+ */
+export interface MarketOrderGroup {
+  marketId: string
+  marketTitle?: string
+  marketSlug?: string  // 显示用的 slug
+  eventSlug?: string  // 跳转用的 slug（从 events[0].slug 获取）
+  marketCategory?: string
+  stats: MarketOrderStats
+  orders: BuyOrderInfo[] | SellOrderInfo[]  // 订单列表
+}
+
+/**
+ * 按市场分组的订单列表响应
+ */
+export interface MarketGroupedOrdersResponse {
+  list: MarketOrderGroup[]
+  total: number  // 市场总数
+  page: number
+  limit: number
 }
 
 /**

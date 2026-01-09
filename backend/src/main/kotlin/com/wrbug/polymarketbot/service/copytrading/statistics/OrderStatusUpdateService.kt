@@ -3,6 +3,7 @@ package com.wrbug.polymarketbot.service.copytrading.statistics
 import com.wrbug.polymarketbot.api.PolymarketClobApi
 import com.wrbug.polymarketbot.entity.*
 import com.wrbug.polymarketbot.repository.*
+import com.wrbug.polymarketbot.service.common.MarketService
 import com.wrbug.polymarketbot.service.system.TelegramNotificationService
 import com.wrbug.polymarketbot.util.RetrofitFactory
 import com.wrbug.polymarketbot.util.CryptoUtils
@@ -33,6 +34,7 @@ class OrderStatusUpdateService(
     private val retrofitFactory: RetrofitFactory,
     private val cryptoUtils: CryptoUtils,
     private val trackingService: CopyOrderTrackingService,
+    private val marketService: MarketService,  // 市场信息服务
     private val telegramNotificationService: TelegramNotificationService?
 ) {
     
@@ -712,25 +714,10 @@ class OrderStatusUpdateService(
                 logger.warn("账户不存在，跳过发送通知: accountId=${order.accountId}")
                 return
             }
-            
+
             // 获取市场信息
-            val marketInfo = withContext(Dispatchers.IO) {
-                try {
-                    val gammaApi = retrofitFactory.createGammaApi()
-                    val marketResponse = gammaApi.listMarkets(conditionIds = listOf(order.marketId))
-                    if (marketResponse.isSuccessful && marketResponse.body() != null) {
-                        marketResponse.body()!!.firstOrNull()
-                    } else {
-                        null
-                    }
-                } catch (e: Exception) {
-                    logger.warn("获取市场信息失败: ${e.message}", e)
-                    null
-                }
-            }
-            
-            val marketTitle = marketInfo?.question ?: order.marketId
-            val marketSlug = marketInfo?.slug
+            val market = marketService.getMarket(order.marketId)
+            val marketTitle = market?.title ?: order.marketId
             
             // 获取 Leader 和跟单配置信息
             val leader = leaderRepository.findById(order.leaderId).orElse(null)
@@ -761,7 +748,7 @@ class OrderStatusUpdateService(
                 orderId = order.buyOrderId,
                 marketTitle = marketTitle,
                 marketId = order.marketId,
-                marketSlug = marketSlug,
+                marketSlug = market?.eventSlug,  // 跳转用的 slug
                 side = "BUY",
                 price = actualPrice ?: order.price.toString(),  // 使用实际价格或临时价格
                 size = actualSize ?: order.quantity.toString(),  // 使用实际数量或临时数量
@@ -817,25 +804,10 @@ class OrderStatusUpdateService(
                 logger.warn("账户不存在，跳过发送通知: accountId=${finalCopyTrading.accountId}")
                 return
             }
-            
+
             // 获取市场信息
-            val marketInfo = withContext(Dispatchers.IO) {
-                try {
-                    val gammaApi = retrofitFactory.createGammaApi()
-                    val marketResponse = gammaApi.listMarkets(conditionIds = listOf(record.marketId))
-                    if (marketResponse.isSuccessful && marketResponse.body() != null) {
-                        marketResponse.body()!!.firstOrNull()
-                    } else {
-                        null
-                    }
-                } catch (e: Exception) {
-                    logger.warn("获取市场信息失败: ${e.message}", e)
-                    null
-                }
-            }
-            
-            val marketTitle = marketInfo?.question ?: record.marketId
-            val marketSlug = marketInfo?.slug
+            val market = marketService.getMarket(record.marketId)
+            val marketTitle = market?.title ?: record.marketId
             
             // 获取 Leader 和跟单配置信息
             val leader = leaderRepository.findById(finalCopyTrading.leaderId).orElse(null)
@@ -866,7 +838,7 @@ class OrderStatusUpdateService(
                 orderId = record.sellOrderId,
                 marketTitle = marketTitle,
                 marketId = record.marketId,
-                marketSlug = marketSlug,
+                marketSlug = market?.eventSlug,  // 跳转用的 slug
                 side = "SELL",
                 price = actualPrice ?: record.sellPrice.toString(),  // 使用实际价格或临时价格
                 size = actualSize ?: record.totalMatchedQuantity.toString(),  // 使用实际数量或临时数量

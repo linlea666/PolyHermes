@@ -8,12 +8,7 @@ import com.wrbug.polymarketbot.util.toSafeBigDecimal
  * 跟单配置实体（独立配置，不再绑定模板）
  */
 @Entity
-@Table(
-    name = "copy_trading",
-    uniqueConstraints = [
-        UniqueConstraint(columnNames = ["account_id", "leader_id"])
-    ]
-)
+@Table(name = "copy_trading")
 data class CopyTrading(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -91,12 +86,22 @@ data class CopyTrading(
     @Column(name = "max_position_count")
     val maxPositionCount: Int? = null,  // 最大仓位数量，NULL表示不启用
     
+    // 关键字过滤配置
+    @Column(name = "keyword_filter_mode", nullable = false, length = 20)
+    val keywordFilterMode: String = "DISABLED",  // 关键字过滤模式：DISABLED（不启用）、WHITELIST（白名单）、BLACKLIST（黑名单）
+    
+    @Column(name = "keywords", columnDefinition = "JSON")
+    val keywords: String? = null,  // 关键字列表（JSON数组），例如：["NBA", "足球", "NBA总决赛"]，当keywordFilterMode为DISABLED时为NULL
+    
     // 新增配置字段
     @Column(name = "config_name", length = 255)
     val configName: String? = null,  // 配置名（可选）
     
     @Column(name = "push_failed_orders", nullable = false)
     val pushFailedOrders: Boolean = false,  // 推送失败订单（默认关闭）
+    
+    @Column(name = "max_market_end_date")
+    val maxMarketEndDate: Long? = null,  // 市场截止时间限制（毫秒时间戳），仅跟单截止时间小于此时间的订单，NULL表示不启用
     
     @Column(name = "created_at", nullable = false)
     val createdAt: Long = System.currentTimeMillis(),

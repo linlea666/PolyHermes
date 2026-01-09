@@ -1,22 +1,29 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Card, Form, Button, Switch, message, Typography, Space, Radio, InputNumber, Modal, Table, Select, Divider, Input } from 'antd'
-import { ArrowLeftOutlined, SaveOutlined, FileTextOutlined, PlusOutlined } from '@ant-design/icons'
-import { apiService } from '../services/api'
-import { useAccountStore } from '../store/accountStore'
-import type { Leader, CopyTradingTemplate, CopyTradingCreateRequest } from '../types'
-import { formatUSDC } from '../utils'
+import React, { useEffect, useState, useRef } from 'react'
+import { Modal, Form, Button, Switch, message, Space, Radio, InputNumber, Table, Select, Divider, Input, Tag, InputRef } from 'antd'
+import { SaveOutlined, FileTextOutlined, PlusOutlined } from '@ant-design/icons'
+import { apiService } from '../../services/api'
+import { useAccountStore } from '../../store/accountStore'
+import type { Leader, CopyTradingTemplate, CopyTradingCreateRequest } from '../../types'
+import { formatUSDC } from '../../utils'
 import { useTranslation } from 'react-i18next'
 import { useMediaQuery } from 'react-responsive'
-import AccountImportForm from '../components/AccountImportForm'
-import LeaderAddForm from '../components/LeaderAddForm'
+import AccountImportForm from '../../components/AccountImportForm'
+import LeaderAddForm from '../../components/LeaderAddForm'
 
-const { Title } = Typography
 const { Option } = Select
 
-const CopyTradingAdd: React.FC = () => {
+interface AddModalProps {
+  open: boolean
+  onClose: () => void
+  onSuccess?: () => void
+}
+
+const AddModal: React.FC<AddModalProps> = ({
+  open,
+  onClose,
+  onSuccess
+}) => {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const isMobile = useMediaQuery({ maxWidth: 768 })
   const { accounts, fetchAccounts } = useAccountStore()
   const [form] = Form.useForm()
@@ -25,6 +32,10 @@ const CopyTradingAdd: React.FC = () => {
   const [templates, setTemplates] = useState<CopyTradingTemplate[]>([])
   const [templateModalVisible, setTemplateModalVisible] = useState(false)
   const [copyMode, setCopyMode] = useState<'RATIO' | 'FIXED'>('RATIO')
+  const [keywords, setKeywords] = useState<string[]>([])
+  const keywordInputRef = useRef<InputRef>(null)
+  const [maxMarketEndDateValue, setMaxMarketEndDateValue] = useState<number | undefined>()
+  const [maxMarketEndDateUnit, setMaxMarketEndDateUnit] = useState<'HOUR' | 'DAY'>('HOUR')
   
   // 导入账户modal相关状态
   const [accountImportModalVisible, setAccountImportModalVisible] = useState(false)
@@ -52,14 +63,24 @@ const CopyTradingAdd: React.FC = () => {
   }
   
   useEffect(() => {
-    fetchAccounts()
-    fetchLeaders()
-    fetchTemplates()
-    
-    // 生成默认配置名
-    const defaultConfigName = generateDefaultConfigName()
-    form.setFieldsValue({ configName: defaultConfigName })
-  }, [])
+    if (open) {
+      fetchAccounts()
+      fetchLeaders()
+      fetchTemplates()
+      
+      // 生成默认配置名
+      const defaultConfigName = generateDefaultConfigName()
+      form.setFieldsValue({ configName: defaultConfigName })
+      
+      // 重置关键字列表
+      setKeywords([])
+    } else {
+      // 关闭时重置表单
+      form.resetFields()
+      setKeywords([])
+      setCopyMode('RATIO')
+    }
+  }, [open])
   
   const fetchLeaders = async () => {
     try {
@@ -140,7 +161,46 @@ const CopyTradingAdd: React.FC = () => {
     leaderAddForm.resetFields()
   }
   
-  const handleSubmit = async (values: any) => {
+  // 添加关键字
+  const handleAddKeyword = (e?: React.KeyboardEvent<HTMLInputElement>) => {
+    let inputValue = ''
+    
+    if (e) {
+      // 从键盘事件获取输入值
+      const target = e.target as HTMLInputElement
+      inputValue = target.value.trim()
+    } else if (keywordInputRef.current) {
+      // 从输入框 ref 获取值
+      inputValue = keywordInputRef.current.input?.value?.trim() || ''
+    }
+    
+    if (!inputValue) {
+      return
+    }
+    
+    // 检查是否已存在
+    if (keywords.includes(inputValue)) {
+      message.warning(t('copyTradingAdd.keywordExists') || '关键字已存在')
+      return
+    }
+    
+    // 添加关键字
+    const newKeywords = [...keywords, inputValue]
+    setKeywords(newKeywords)
+    
+    // 清空输入框
+    if (keywordInputRef.current) {
+      keywordInputRef.current.input!.value = ''
+    }
+  }
+  
+  // 删除关键字
+  const handleRemoveKeyword = (index: number) => {
+    const newKeywords = keywords.filter((_, i) => i !== index)
+    setKeywords(newKeywords)
+  }
+  
+    const handleSubmit = async (values: any) => {
     // 前端校验
     if (values.copyMode === 'FIXED') {
       if (!values.fixedAmount || Number(values.fixedAmount) < 1) {
@@ -152,6 +212,15 @@ const CopyTradingAdd: React.FC = () => {
     if (values.copyMode === 'RATIO' && values.minOrderSize !== undefined && values.minOrderSize !== null && Number(values.minOrderSize) < 1) {
       message.error(t('copyTradingAdd.minOrderSizeMin') || '最小金额必须 >= 1')
       return
+    }
+    
+    // 计算市场截止时间（毫秒）
+    let maxMarketEndDate: number | undefined
+    if (maxMarketEndDateValue !== undefined && maxMarketEndDateValue > 0) {
+      const multiplier = maxMarketEndDateUnit === 'HOUR' 
+        ? 60 * 60 * 1000  // 小时转毫秒
+        : 24 * 60 * 60 * 1000  // 天转毫秒
+      maxMarketEndDate = maxMarketEndDateValue * multiplier
     }
     
     setLoading(true)
@@ -180,15 +249,23 @@ const CopyTradingAdd: React.FC = () => {
         maxPrice: values.maxPrice?.toString(),
         maxPositionValue: values.maxPositionValue?.toString(),
         maxPositionCount: values.maxPositionCount,
+        keywordFilterMode: values.keywordFilterMode || 'DISABLED',
+        keywords: (values.keywordFilterMode === 'WHITELIST' || values.keywordFilterMode === 'BLACKLIST') 
+          ? keywords 
+          : undefined,
         configName: values.configName?.trim(),
-        pushFailedOrders: values.pushFailedOrders ?? false
+        pushFailedOrders: values.pushFailedOrders ?? false,
+        maxMarketEndDate
       }
       
       const response = await apiService.copyTrading.create(request)
       
       if (response.data.code === 0) {
         message.success(t('copyTradingAdd.createSuccess') || '创建跟单配置成功')
-        navigate('/copy-trading')
+        onClose()
+        if (onSuccess) {
+          onSuccess()
+        }
       } else {
         message.error(response.data.msg || t('copyTradingAdd.createFailed') || '创建跟单配置失败')
       }
@@ -200,19 +277,17 @@ const CopyTradingAdd: React.FC = () => {
   }
   
   return (
-    <div>
-      <div style={{ marginBottom: 16 }}>
-        <Button
-          icon={<ArrowLeftOutlined />}
-          onClick={() => navigate('/copy-trading')}
-        >
-          {t('common.back') || '返回'}
-        </Button>
-      </div>
-      
-      <Card>
-        <Title level={4}>{t('copyTradingAdd.title') || '新增跟单配置'}</Title>
-        
+    <>
+      <Modal
+        title={t('copyTradingAdd.title') || '新增跟单配置'}
+        open={open}
+        onCancel={onClose}
+        footer={null}
+        width="90%"
+        style={{ top: 20 }}
+        bodyStyle={{ padding: '24px', maxHeight: 'calc(100vh - 100px)', overflow: 'auto' }}
+        destroyOnClose
+      >
         <Form
           form={form}
           layout="vertical"
@@ -231,7 +306,8 @@ const CopyTradingAdd: React.FC = () => {
             websocketReconnectInterval: 5000,
             websocketMaxRetries: 10,
             supportSell: true,
-            pushFailedOrders: false
+            pushFailedOrders: false,
+            keywordFilterMode: 'DISABLED'
           }}
         >
           {/* 基础信息 */}
@@ -352,42 +428,18 @@ const CopyTradingAdd: React.FC = () => {
                 addonAfter="%"
                 placeholder={t('copyTradingAdd.copyRatioPlaceholder') || '例如：100 表示 100%（1:1 跟单），默认 100%'}
                 parser={(value) => {
-                  console.log('[CopyTradingAdd copyRatio parser] 输入值:', value, '类型:', typeof value)
-                  // 移除 % 符号和其他非数字字符（保留小数点和负号）
                   const cleaned = (value || '').toString().replace(/%/g, '').trim()
-                  console.log('[CopyTradingAdd copyRatio parser] 清理后:', cleaned)
                   const parsed = parseFloat(cleaned) || 0
-                  console.log('[CopyTradingAdd copyRatio parser] 解析后:', parsed)
-                  if (parsed > 10000) {
-                    console.log('[CopyTradingAdd copyRatio parser] 超过最大值，返回 10000')
-                    return 10000
-                  }
-                  if (parsed < 0.01) {
-                    console.log('[CopyTradingAdd copyRatio parser] 小于最小值，返回 0.01')
-                    return 0.01
-                  }
-                  console.log('[CopyTradingAdd copyRatio parser] 返回:', parsed)
+                  if (parsed > 10000) return 10000
+                  if (parsed < 0.01) return 0.01
                   return parsed
                 }}
                 formatter={(value) => {
-                  console.log('[CopyTradingAdd copyRatio formatter] 输入值:', value, '类型:', typeof value)
-                  if (!value && value !== 0) {
-                    console.log('[CopyTradingAdd copyRatio formatter] 空值，返回空字符串')
-                    return ''
-                  }
+                  if (!value && value !== 0) return ''
                   const num = parseFloat(value.toString())
-                  console.log('[CopyTradingAdd copyRatio formatter] 解析后:', num)
-                  if (isNaN(num)) {
-                    console.log('[CopyTradingAdd copyRatio formatter] NaN，返回空字符串')
-                    return ''
-                  }
-                  if (num > 10000) {
-                    console.log('[CopyTradingAdd copyRatio formatter] 超过最大值，返回 10000')
-                    return '10000'
-                  }
-                  const result = num.toString().replace(/\.0+$/, '')
-                  console.log('[CopyTradingAdd copyRatio formatter] 格式化后返回:', result)
-                  return result
+                  if (isNaN(num)) return ''
+                  if (num > 10000) return '10000'
+                  return num.toString().replace(/\.0+$/, '')
                 }}
               />
             </Form.Item>
@@ -674,6 +726,120 @@ const CopyTradingAdd: React.FC = () => {
             />
           </Form.Item>
           
+          <Divider>{t('copyTradingAdd.keywordFilter') || '关键字过滤'}</Divider>
+          
+          <Form.Item
+            label={t('copyTradingAdd.keywordFilterMode') || '过滤模式'}
+            name="keywordFilterMode"
+            tooltip={t('copyTradingAdd.keywordFilterModeTooltip') || '选择关键字过滤模式。白名单：只跟单包含关键字的市场；黑名单：不跟单包含关键字的市场；不启用：不进行关键字过滤'}
+          >
+            <Radio.Group>
+              <Radio value="DISABLED">{t('copyTradingAdd.disabled') || '不启用'}</Radio>
+              <Radio value="WHITELIST">{t('copyTradingAdd.whitelist') || '白名单'}</Radio>
+              <Radio value="BLACKLIST">{t('copyTradingAdd.blacklist') || '黑名单'}</Radio>
+            </Radio.Group>
+          </Form.Item>
+          
+          <Form.Item noStyle shouldUpdate={(prevValues, currentValues) => 
+            prevValues.keywordFilterMode !== currentValues.keywordFilterMode
+          }>
+            {({ getFieldValue }) => {
+              const filterMode = getFieldValue('keywordFilterMode')
+              if (filterMode !== 'WHITELIST' && filterMode !== 'BLACKLIST') {
+                return null
+              }
+              
+              return (
+                <>
+                  <Form.Item label={t('copyTradingAdd.keywords') || '关键字'}>
+                    <Space.Compact style={{ width: '100%' }}>
+                      <Input
+                        ref={keywordInputRef}
+                        placeholder={t('copyTradingAdd.keywordPlaceholder') || '输入关键字，按回车添加'}
+                        onPressEnter={(e) => handleAddKeyword(e)}
+                      />
+                      <Button 
+                        type="primary" 
+                        onClick={() => handleAddKeyword()}
+                      >
+                        {t('common.add') || '添加'}
+                      </Button>
+                    </Space.Compact>
+                    
+                    {keywords.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <Space wrap>
+                          {keywords.map((keyword, index) => (
+                            <Tag
+                              key={index}
+                              closable
+                              onClose={() => handleRemoveKeyword(index)}
+                              color={filterMode === 'WHITELIST' ? 'green' : 'red'}
+                            >
+                              {keyword}
+                            </Tag>
+                          ))}
+                        </Space>
+                      </div>
+                    )}
+                    
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+                      {filterMode === 'WHITELIST' 
+                        ? (t('copyTradingAdd.whitelistTooltip') || '💡 白名单模式：只跟单包含上述任意关键字的市场标题')
+                        : (t('copyTradingAdd.blacklistTooltip') || '💡 黑名单模式：不跟单包含上述任意关键字的市场标题')
+                      }
+                    </div>
+                  </Form.Item>
+                </>
+              )
+            }}
+          </Form.Item>
+          
+          {/* 市场截止时间限制 */}
+          <Divider>{t('copyTradingAdd.marketEndDateFilter') || '市场截止时间限制'}</Divider>
+          
+          <Form.Item
+            label={t('copyTradingAdd.maxMarketEndDate') || '最大市场截止时间'}
+            tooltip={t('copyTradingAdd.maxMarketEndDateTooltip') || '仅跟单截止时间小于设定时间的订单。例如：24 小时表示只跟单距离结算还剩24小时以内的市场'}
+          >
+            <Input.Group compact style={{ display: 'flex' }}>
+              <InputNumber
+                min={1}
+                max={9999}
+                step={1}
+                precision={0}
+                value={maxMarketEndDateValue}
+                onChange={(value) => setMaxMarketEndDateValue(value !== null && value !== undefined ? Math.floor(value) : undefined)}
+                style={{ width: '60%' }}
+                placeholder={t('copyTradingAdd.maxMarketEndDatePlaceholder') || '输入时间值（可选）'}
+                parser={(value) => {
+                  if (!value) return 0
+                  const num = parseInt(value.replace(/\D/g, ''), 10)
+                  return isNaN(num) ? 0 : num
+                }}
+                formatter={(value) => {
+                  if (!value && value !== 0) return ''
+                  return Math.floor(value).toString()
+                }}
+              />
+              <Select
+                value={maxMarketEndDateUnit}
+                onChange={(value) => setMaxMarketEndDateUnit(value)}
+                style={{ width: '40%' }}
+                placeholder={t('copyTradingAdd.timeUnit') || '单位'}
+              >
+                <Option value="HOUR">{t('copyTradingAdd.hour') || '小时'}</Option>
+                <Option value="DAY">{t('copyTradingAdd.day') || '天'}</Option>
+              </Select>
+            </Input.Group>
+          </Form.Item>
+          
+          <Form.Item style={{ marginBottom: 0 }}>
+            <div style={{ fontSize: 12, color: '#999' }}>
+              {t('copyTradingAdd.maxMarketEndDateNote') || '💡 说明：不填写表示不启用此限制'}
+            </div>
+          </Form.Item>
+          
           <Divider>{t('copyTradingAdd.advancedSettings') || '高级设置'}</Divider>
           
           {/* 跟单卖出 */}
@@ -706,13 +872,13 @@ const CopyTradingAdd: React.FC = () => {
               >
                 {t('copyTradingAdd.create') || '创建跟单配置'}
               </Button>
-              <Button onClick={() => navigate('/copy-trading')}>
+              <Button onClick={onClose}>
                 {t('common.cancel') || '取消'}
               </Button>
             </Space>
           </Form.Item>
         </Form>
-      </Card>
+      </Modal>
       
       {/* 模板选择 Modal */}
       <Modal
@@ -812,8 +978,9 @@ const CopyTradingAdd: React.FC = () => {
           showCancelButton={true}
         />
       </Modal>
-    </div>
+    </>
   )
 }
 
-export default CopyTradingAdd
+export default AddModal
+

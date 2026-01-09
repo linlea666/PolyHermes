@@ -5,107 +5,41 @@ path: frontend/**
 
 # 前端开发规范
 
-## 代码完成规范
-
-### TODO 处理规则
-- **禁止**在代码中添加 TODO 注释
-- **必须**根据 TODO 的内容直接完成代码实现
-- 如果遇到暂时无法完全实现的功能，应该：
-  1. 实现一个可用的基础版本
-  2. 添加清晰的注释说明当前实现的限制和后续改进方向
-  3. 确保代码可以正常编译和运行
-- **禁止**使用 `// TODO: 实现XXX` 这样的注释
-- **禁止**使用 `// FIXME:` 或 `// XXX:` 这样的注释
-- 如果某个功能需要依赖外部资源（如 API、库等），应该：
-  1. 先实现一个占位或模拟实现
-  2. 在注释中说明依赖关系和实现方式
-  3. 确保代码逻辑完整，不会因为未实现的功能而崩溃
-
-### API 调用实现规则
-- **必须**查找相关的 API 文档或接口定义
-- **必须**根据 API 文档完成代码实现
-- **禁止**在 API 调用处添加 TODO 注释
-- 如果 API 文档不完整，应该：
-  1. 查找项目中已有的类似 API 调用作为参考
-  2. 查看 API 服务定义（如 `services/api.ts`）
-  3. 查看 API 文档（如 `docs/copy-trading-requirements.md`）
-  4. 实现一个可用的版本，包含错误处理
-
-### 代码完成示例
-
-```typescript
-// ❌ 错误：添加 TODO 注释
-const fetchAccountBalance = async (accountId: number) => {
-  // TODO: 调用 API 查询余额
-  return { balance: '0' }
-}
-
-// ✅ 正确：查找 API 定义并完成实现
-// 1. 查找 API 服务定义：services/api.ts 中的 accounts.balance
-// 2. 查找 API 文档：docs/copy-trading-requirements.md
-// 3. 实现完整的 API 调用逻辑
-const fetchAccountBalance = async (accountId: number) => {
-  try {
-    // 根据 API 服务定义调用接口
-    const response = await apiService.accounts.balance({ accountId })
-    
-    // 根据 API 响应格式处理数据
-    if (response.data.code === 0 && response.data.data) {
-      return response.data.data
-    } else {
-      // API 调用失败时返回默认值
-      console.warn('查询余额失败，返回默认值:', response.data.msg)
-      return { balance: '0' }
-    }
-  } catch (error) {
-    console.error('查询余额异常:', error)
-    // 异常时返回默认值，确保代码可以正常运行
-    return { balance: '0' }
-  }
-}
-```
+## 核心原则
+- **禁止**在代码中添加 TODO/FIXME/XXX 注释
+- **禁止**使用 `any` 类型
+- **禁止**硬编码中文或英文文本
+- **必须**支持移动端和桌面端
 
 ## 技术栈
 - **框架**: React + TypeScript
-- **UI库**: Ant Design 或 Material-UI（推荐 Ant Design Mobile 用于移动端）
-- **HTTP客户端**: axios
-- **状态管理**: Zustand 或 Redux
-- **响应式设计**: 必须支持移动端和桌面端
+- **UI 库**: Ant Design（移动端使用 Ant Design Mobile）
+- **HTTP 客户端**: axios
+- **状态管理**: Zustand
+- **国际化**: react-i18next
 
-## 移动端适配要求
+## 移动端适配
 
-### 响应式设计
-- **必须支持移动端和桌面端**
-- 使用响应式布局（Responsive Design）
-- 移动端优先（Mobile First）设计原则
-- 支持触摸操作和手势
-
-### 断点设置
+### 响应式断点
 - **移动端**: < 768px
 - **平板**: 768px - 1024px
 - **桌面端**: > 1024px
 
-### UI 组件适配
-- 使用 Ant Design 的响应式组件
-- 移动端使用 Ant Design Mobile（如果使用 Ant Design）
-- 表格使用虚拟滚动或分页（移动端性能优化）
-- 表单使用移动端友好的输入组件
-
-### 布局适配
-- 导航栏：移动端使用抽屉菜单，桌面端使用顶部导航
-- 列表：移动端使用卡片布局，桌面端使用表格布局
-- 按钮：移动端按钮尺寸不小于 44x44px（触摸友好）
-- 间距：移动端使用更大的间距，提高可点击区域
+### 适配要求
+- 使用响应式布局（Mobile First）
+- 导航栏：移动端抽屉菜单，桌面端顶部导航
+- 列表：移动端卡片布局，桌面端表格布局
+- 按钮：移动端不小于 44x44px
+- 支持触摸操作和手势
 
 ### 性能优化
 - 图片懒加载
 - 代码分割（Code Splitting）
 - 移动端减少动画效果
-- 使用 CSS 媒体查询优化样式
 
 ## 代码规范
 
-### 组件规范
+### 组件
 - 使用函数式组件
 - 使用 TypeScript 类型定义
 - 组件文件使用 PascalCase 命名
@@ -122,24 +56,18 @@ export const MarketCard: React.FC<MarketProps> = ({ marketId, platform }) => {
 };
 
 // ❌ 错误
-export const marketCard = (props: any) => {  // 禁止使用any
-  // ...
-};
+export const marketCard = (props: any) => { }
 ```
 
-### API调用规范
-- 使用 axios 进行 HTTP 请求
+### API 调用
+- 使用 axios
 - 统一错误处理
 - 使用 TypeScript 定义响应类型
 
 ```typescript
-// API服务
-import axios from 'axios';
-
 interface Market {
   id: string;
   marketId: string;
-  platform: string;
   title: string;
 }
 
@@ -147,24 +75,16 @@ export const marketService = {
   getMarkets: async (): Promise<Market[]> => {
     const response = await axios.get<Market[]>('/api/markets');
     return response.data;
-  },
-  
-  getMarketById: async (id: string): Promise<Market> => {
-    const response = await axios.get<Market>(`/api/markets/${id}`);
-    return response.data;
   }
 };
 ```
 
-### 状态管理规范
-- 使用 Zustand 或 Redux 管理全局状态
+### 状态管理
+- 全局状态使用 Zustand
 - 本地状态使用 `useState`
 - 复杂状态使用 `useReducer`
 
 ```typescript
-// Zustand Store示例
-import { create } from 'zustand';
-
 interface MarketStore {
   markets: Market[];
   setMarkets: (markets: Market[]) => void;
@@ -176,79 +96,63 @@ export const useMarketStore = create<MarketStore>((set) => ({
 }));
 ```
 
-### USDC 金额格式化规范
-- **必须**使用 `formatUSDC` 函数格式化所有 USDC 金额显示
-- **禁止**直接使用 `toFixed()` 或 `parseFloat().toFixed()` 格式化 USDC
-- **禁止**硬编码小数位数格式化 USDC
-- 所有 USDC 金额显示必须统一使用 `formatUSDC` 函数
-
-#### formatUSDC 函数说明
-- **位置**: `src/utils/index.ts`
-- **功能**: 格式化 USDC 金额，最多显示 4 位小数，自动去除尾随零（截断，不四舍五入）
-- **参数**: `value: string | number | undefined | null`
-- **返回值**: 格式化后的字符串，如果值为空或无效则返回 `'-'`
-
-#### 使用示例
+### USDC 金额格式化
+**必须**使用 `formatUSDC` 函数（从 `../utils` 导入）
 
 ```typescript
-// ✅ 正确：使用 formatUSDC 格式化 USDC 金额
 import { formatUSDC } from '../utils'
 
-const BalanceDisplay: React.FC<{ balance: string }> = ({ balance }) => {
-  return <span>{formatUSDC(balance)} USDC</span>
-}
-
-// ✅ 正确：在表格列中使用
-const columns = [
-  {
-    title: '余额',
-    dataIndex: 'balance',
-    render: (balance: string) => `${formatUSDC(balance)} USDC`
-  }
-]
-
-// ✅ 正确：在统计组件中使用
+// ✅ 正确
 <Statistic
   title="总盈亏"
   value={formatUSDC(stats?.totalPnl || '0')}
   suffix="USDC"
 />
 
-// ❌ 错误：直接使用 toFixed
-const balance = parseFloat(value).toFixed(4)  // 禁止
-
-// ❌ 错误：硬编码格式化
-const balance = `${parseFloat(value).toFixed(2)} USDC`  // 禁止
-
-// ❌ 错误：使用自定义格式化函数
-const formatBalance = (value: string) => parseFloat(value).toFixed(4)  // 禁止
+// ❌ 错误
+const balance = parseFloat(value).toFixed(4)
 ```
 
-#### 格式化规则
-- **最多显示 4 位小数**：如果金额超过 4 位小数，截断到 4 位（不四舍五入）
-- **自动去除尾随零**：去除不必要的尾随零和小数点
-- **示例**：
-  - `formatUSDC(1.23)` => `"1.23"`
-  - `formatUSDC(1.23456)` => `"1.2345"`（截断，不四舍五入）
-  - `formatUSDC(1.2)` => `"1.2"`
-  - `formatUSDC(1)` => `"1"`
-  - `formatUSDC(1.23459)` => `"1.2345"`（截断，不四舍五入）
-  - `formatUSDC(null)` => `"-"`
-  - `formatUSDC(undefined)` => `"-"`
+**格式化规则**:
+- 最多显示 4 位小数（截断，不四舍五入）
+- 自动去除尾随零
+- 空值返回 `'-'`
 
-#### 工具函数统一导出
-- 所有工具函数统一从 `src/utils/index.ts` 导出
-- **必须**从 `../utils` 导入工具函数，而不是从具体文件导入
-- `ethers.ts` 中的函数也会在 `index.ts` 中统一导出
+## 多语言规范
+
+### 使用方式
+**必须**使用 `useTranslation` Hook
 
 ```typescript
-// ✅ 正确：从 utils 统一导入
-import { formatUSDC, getAddressFromPrivateKey, isValidWalletAddress } from '../utils'
+// ✅ 正确
+import { useTranslation } from 'react-i18next'
 
-// ❌ 错误：从具体文件导入
-import { formatUSDC } from '../utils/index'
-import { getAddressFromPrivateKey } from '../utils/ethers'
+const MyComponent: React.FC = () => {
+  const { t } = useTranslation()
+  
+  return (
+    <div>
+      <h1>{t('page.title')}</h1>
+      <Button>{t('common.save')}</Button>
+    </div>
+  )
+}
+
+// ❌ 错误：硬编码文本
+<h1>页面标题</h1>
+<Button>保存</Button>
 ```
+
+### 语言文件
+- 位置: `src/locales/{locale}/common.json`
+- 支持: `zh-CN`、`zh-TW`、`en`
+- 键名: 点号分隔的层级结构（如 `notificationSettings.title`）
+
+### 添加新翻译
+1. 在 `src/locales/zh-CN/common.json` 添加中文
+2. 在 `src/locales/zh-TW/common.json` 添加繁体
+3. 在 `src/locales/en/common.json` 添加英文
+4. 在组件中使用 `t('key')`
 
 ## 移动端适配示例
 
@@ -263,29 +167,6 @@ const MyComponent: React.FC = () => {
     <div className={isMobile ? 'mobile-layout' : 'desktop-layout'}>
       {isMobile ? <MobileView /> : <DesktopView />}
     </div>
-  );
-};
-```
-
-### 移动端导航
-```typescript
-import { Drawer } from 'antd';
-
-const MobileNav: React.FC = () => {
-  const [open, setOpen] = useState(false);
-  
-  return (
-    <>
-      <Button onClick={() => setOpen(true)}>菜单</Button>
-      <Drawer
-        title="导航"
-        placement="left"
-        onClose={() => setOpen(false)}
-        open={open}
-      >
-        {/* 导航内容 */}
-      </Drawer>
-    </>
   );
 };
 ```
@@ -316,63 +197,18 @@ const ResponsiveTable: React.FC = () => {
 ### 代码质量
 - ❌ 禁止使用 `any` 类型
 - ❌ 禁止忽略错误处理
-- ❌ 禁止硬编码API地址
+- ❌ 禁止硬编码 API 地址
 - ❌ 禁止在组件中直接使用 `fetch`
 - ❌ 禁止忽略移动端适配
 
 ### 类型安全
-- ❌ 禁止使用 `any`
-- ❌ 禁止忽略 TypeScript 类型检查
 - ❌ 禁止使用 `@ts-ignore` 除非有明确原因
 
 ### 移动端适配
 - ❌ 禁止固定宽度布局
 - ❌ 禁止使用过小的触摸目标（< 44x44px）
-- ❌ 禁止忽略移动端性能优化
-- ❌ 禁止使用桌面端专用的交互方式（如 hover）
+- ❌ 禁止使用桌面端专用交互（如 hover）
 
-### 多语言使用规范
-- **必须**使用多语言（i18n）进行所有文本显示
-- **禁止**在组件中硬编码中文或英文文本
-- **必须**使用 `useTranslation` Hook 获取翻译函数
-- **必须**在语言文件中定义所有显示的文本
-- **必须**支持至少中文（简体/繁体）和英文
-
-#### 多语言使用示例
-
-```typescript
-// ✅ 正确：使用多语言
-import { useTranslation } from 'react-i18next'
-
-const MyComponent: React.FC = () => {
-  const { t } = useTranslation()
-  
-  return (
-    <div>
-      <h1>{t('page.title')}</h1>
-      <Button>{t('common.save')}</Button>
-    </div>
-  )
-}
-
-// ❌ 错误：硬编码文本
-const MyComponent: React.FC = () => {
-  return (
-    <div>
-      <h1>页面标题</h1>  {/* 禁止硬编码 */}
-      <Button>保存</Button>  {/* 禁止硬编码 */}
-    </div>
-  )
-}
-```
-
-#### 语言文件结构
-- 语言文件位置：`src/locales/{locale}/common.json`
-- 支持的语言：`zh-CN`（简体中文）、`zh-TW`（繁体中文）、`en`（英文）
-- 键名使用点号分隔的层级结构，如：`notificationSettings.title`
-
-#### 添加新翻译的步骤
-1. 在 `src/locales/zh-CN/common.json` 中添加中文翻译
-2. 在 `src/locales/zh-TW/common.json` 中添加繁体中文翻译
-3. 在 `src/locales/en/common.json` 中添加英文翻译
-4. 在组件中使用 `t('key')` 获取翻译
+### 多语言
+- ❌ 禁止硬编码中文或英文文本
+- ❌ 禁止绕过 `useTranslation` 直接显示文本

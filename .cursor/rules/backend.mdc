@@ -5,391 +5,62 @@ path: backend/**
 
 # 后端开发规范
 
-## 代码完成规范
-
-### TODO 处理规则
-- **禁止**在代码中添加 TODO 注释
-- **必须**根据 TODO 的内容直接完成代码实现
-- 如果遇到暂时无法完全实现的功能，应该：
-  1. 实现一个可用的基础版本
-  2. 添加清晰的注释说明当前实现的限制和后续改进方向
-  3. 确保代码可以正常编译和运行
-- **禁止**使用 `// TODO: 实现XXX` 这样的注释
-- **禁止**使用 `// FIXME:` 或 `// XXX:` 这样的注释
-- 如果某个功能需要依赖外部资源（如 API、库等），应该：
-  1. 先实现一个占位或模拟实现
-  2. 在注释中说明依赖关系和实现方式
-  3. 确保代码逻辑完整，不会因为未实现的功能而崩溃
-
-### API 调用实现规则
-- **必须**查找相关的 API 文档或接口定义
-- **必须**根据 API 文档完成代码实现
-- **禁止**在 API 调用处添加 TODO 注释
-- **禁止**直接返回 mock 数据或硬编码的假数据
-- **必须**调用真实的 API 或查询真实的数据库
-- 如果 API 文档不完整，应该：
-  1. 查找项目中已有的类似 API 调用作为参考
-  2. 查看 API 接口定义（如 `PolymarketClobApi.kt`）
-  3. 查看 API 文档（如 `docs/polymarket-api-reference.md`）
-  4. 实现一个可用的版本，包含错误处理
-- 如果 API 调用失败，应该：
-  1. 返回明确的错误信息
-  2. 记录错误日志
-  3. 返回错误响应，而不是返回 mock 数据
-
-### 代码完成示例
-
-```kotlin
-// ❌ 错误：添加 TODO 注释
-fun getAccountBalance(accountId: Long?): Result<AccountBalanceResponse> {
-    // TODO: 调用 Polymarket API 查询余额
-    return Result.success(AccountBalanceResponse(usdcBalance = "0"))
-}
-
-// ✅ 正确：查找 API 文档并完成实现
-// 1. 查找 API 接口定义：PolymarketClobApi.getActiveOrders()
-// 2. 查找 API 文档：docs/polymarket-api-reference.md
-// 3. 实现完整的 API 调用逻辑，调用真实的 API
-fun getAccountBalance(accountId: Long?): Result<AccountBalanceResponse> {
-    return try {
-        val account = getAccount(accountId) ?: return Result.failure(IllegalArgumentException("账户不存在"))
-        
-        // 如果账户没有配置 API 凭证，返回错误而不是 mock 数据
-        if (account.apiKey == null || account.apiSecret == null || account.apiPassphrase == null) {
-            return Result.failure(IllegalStateException("账户未配置 API 凭证，无法查询余额"))
-        }
-        
-        // 解密 API 凭证并创建认证客户端
-        val apiKey = cryptoUtils.decrypt(account.apiKey!!)
-        val apiSecret = cryptoUtils.decrypt(account.apiSecret!!)
-        val apiPassphrase = cryptoUtils.decrypt(account.apiPassphrase!!)
-        val clobApi = retrofitFactory.createClobApi(apiKey, apiSecret, apiPassphrase)
-        
-        // 调用真实的 API 查询余额
-        val response = clobApi.getActiveOrders(limit = 100)
-        if (response.isSuccessful && response.body() != null) {
-            // 根据 API 响应处理余额数据（从真实响应中解析）
-            val orders = response.body()!!
-            // 实际应该调用余额查询接口或从链上查询
-            // 这里只是示例，实际应该调用真实的余额查询 API
-            val balance = queryRealBalanceFromApi(clobApi, account.walletAddress)
-            Result.success(AccountBalanceResponse(usdcBalance = balance))
-        } else {
-            logger.error("查询余额失败: ${response.code()} ${response.message()}")
-            Result.failure(Exception("查询余额失败: ${response.code()} ${response.message()}"))
-        }
-    } catch (e: Exception) {
-        logger.error("查询账户余额失败", e)
-        Result.failure(e)
-    }
-}
-```
-
-## 需求文档引用
-
-### 跟单系统需求
-- **需求文档**: `docs/copy-trading-requirements.md`
-- **说明**: 所有跟单系统相关的功能实现必须严格按照需求文档执行
-- **核心功能**:
-  - 账户管理（通过私钥导入，支持多账户）
-  - Leader 管理（被跟单者管理）
-  - 订单同步与执行（监控 Leader 交易并自动复制）
-  - 跟单配置管理（全局配置和单个 Leader 配置）
-  - 风险控制（每日亏损限制、订单数限制等）
-  - 跟单记录与统计
-
-**重要提示**: 在实现跟单系统相关功能时，请先查阅 `docs/copy-trading-requirements.md` 了解详细需求，包括：
-- 数据模型设计（Account、Leader、CopyOrder 等）
-- API 接口设计（请求/响应格式）
-- 业务规则和验证逻辑
-- 安全要求（私钥加密存储、API Key 管理等）
+## 核心原则
+- **禁止**在代码中添加 TODO/FIXME/XXX 注释
+- **禁止**返回 mock 数据或硬编码的假数据
+- **禁止**在 API 调用失败时返回默认值作为 fallback
+- 所有功能必须完整实现，确保代码可以正常运行
 
 ## 项目范围
-
-### 平台支持
-- **仅支持**: Polymarket 平台
-- **不支持**: 其他预测市场平台（如 Kalshi 等）
-
-### 分类支持
-- **仅支持**: 
-  - `sports`: 体育相关市场
-  - `crypto`: 加密货币相关市场
-- **不支持**: 其他分类（如 politics、entertainment 等）
-
-### 分类验证
-- 所有涉及分类的接口、实体、服务必须验证分类参数
-- 分类参数只能是 `sports` 或 `crypto`
-- 无效分类应返回明确的错误提示
-
-## 包名规范
+- **平台**: 仅支持 Polymarket
 - **包名**: `com.wrbug.polymarketbot`
-- 所有代码必须使用此包名
 
 ## 实体类规范
-
-### ID字段规范
-- **必须**使用 `Long? = null` 作为 `@GeneratedValue` 的 id 字段
-- **禁止**使用 `Long = 0` 或其他默认值
-
 ```kotlin
-// ✅ 正确
 @Entity
 @Table(name = "example_table")
 data class ExampleEntity(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long? = null,
-    // ...
-)
-
-// ❌ 错误
-@Entity
-data class ExampleEntity(
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long = 0,  // 禁止使用
-    // ...
+    val id: Long? = null,  // ✅ 正确：使用可空类型
+    
+    @Column(name = "created_at", nullable = false)
+    val createdAt: Long = System.currentTimeMillis(),  // ✅ 使用 Long 时间戳
+    
+    @Column(name = "amount", nullable = false, precision = 20, scale = 8)
+    val amount: BigDecimal = BigDecimal.ZERO  // ✅ 使用 BigDecimal
 )
 ```
+
+**规则**:
+- ID 字段必须使用 `Long? = null`
+- 时间字段使用 `Long` 时间戳（毫秒）
+- 数值字段使用 `BigDecimal`
+- **禁止**使用 `LocalDateTime` 或 `Double`
 
 ## 配置文件规范
-
-### 配置文件格式
-- **必须**使用 `application.properties` 格式
-- **禁止**使用 `application.yml` 格式
-- 配置文件位置: `src/main/resources/application.properties`
-
-### 配置示例
-```properties
-# 应用配置
-spring.application.name=polymarket-bot-backend
-
-# 数据源配置
-spring.datasource.url=jdbc:mysql://localhost:3306/polymarket_bot?useSSL=false&serverTimezone=UTC&characterEncoding=utf8mb4
-spring.datasource.username=${DB_USERNAME:root}
-spring.datasource.password=${DB_PASSWORD:password}
-spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
-
-# HikariCP 连接池配置
-spring.datasource.hikari.maximum-pool-size=10
-spring.datasource.hikari.minimum-idle=2
-spring.datasource.hikari.connection-timeout=30000
-
-# JPA 配置
-spring.jpa.hibernate.ddl-auto=validate
-spring.jpa.show-sql=false
-spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQL8Dialect
-
-# Flyway 配置
-spring.flyway.enabled=true
-spring.flyway.locations=classpath:db/migration
-spring.flyway.baseline-on-migrate=true
-
-# 服务器配置
-server.port=${SERVER_PORT:8000}
-
-# 日志配置
-logging.level.root=INFO
-logging.level.com.wrbug.polymarketbot=DEBUG
-logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} - %msg%n
-```
-
-### 环境变量引用
-- 使用 `${ENV_VAR:default}` 格式引用环境变量
-- 支持多环境配置: `application-dev.properties`, `application-prod.properties`
+- **必须**使用 `application.properties` 格式（禁止 `application.yml`）
+- 使用 `${ENV_VAR:default}` 引用环境变量
 
 ## 代码规范
 
-### Controller规范
-- Controller 方法**禁止**使用 `suspend`
-- 如需调用 suspend 方法，使用 `runBlocking`（最小化使用）
-- 只作用于 suspend 方法调用
+### Controller
+- **禁止**使用 `suspend`
+- 使用 `runBlocking` 调用 suspend 方法
+- 统一使用 `@PostMapping`
 
-```kotlin
-// ✅ 正确
-@RestController
-class ExampleController(
-    private val exampleService: ExampleService
-) {
-    @PostMapping("/example")
-    fun getExample(): ResponseEntity<ApiResponse<ExampleDto>> {
-        val data = runBlocking { exampleService.getData() }
-        return ResponseEntity.ok(ApiResponse.success(data))
-    }
-}
-
-// ❌ 错误
-@RestController
-class ExampleController {
-    @PostMapping("/example")
-    suspend fun getExample(): ResponseEntity<ApiResponse<ExampleDto>> {  // 禁止使用suspend
-        // ...
-    }
-}
-```
-
-### Service规范
-- Service 层可以使用 `suspend` 方法
+### Service
+- 可以使用 `suspend` 方法
 - 使用 `@Transactional` 管理事务
 - 使用构造函数注入依赖
 
-```kotlin
-@Service
-class ExampleService(
-    private val exampleRepository: ExampleRepository
-) {
-    suspend fun getAllData(): List<ExampleEntity> {
-        return exampleRepository.findAll()
-    }
-    
-    @Transactional
-    fun saveData(entity: ExampleEntity): ExampleEntity {
-        return exampleRepository.save(entity)
-    }
-}
-```
-
-### Repository规范
-- Repository 接口继承 `JpaRepository`
+### Repository
+- 继承 `JpaRepository<Entity, Long>`
 - 使用 Spring Data JPA 方法命名规范
 
-```kotlin
-@Repository
-interface ExampleRepository : JpaRepository<ExampleEntity, Long> {
-    fun findByCode(code: String): ExampleEntity?
-    fun findByCategoryAndStatus(category: String, status: String): List<ExampleEntity>
-    fun findByCategory(category: String): List<ExampleEntity>  // category: sports 或 crypto
-}
-```
+## API 接口规范
 
-### Entity规范
-- 使用 `@Entity` 和 `@Table` 注解
-- ID字段使用 `Long? = null`
-- 时间字段使用 `Long` 时间戳（毫秒）
-- 数值字段使用 `BigDecimal`，使用 `String` 存储
-
-```kotlin
-@Entity
-@Table(name = "example_table")
-data class ExampleEntity(
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long? = null,
-    
-    @Column(name = "code", unique = true, nullable = false, length = 100)
-    val code: String = "",
-    
-    @Column(name = "category", nullable = false, length = 20)
-    val category: String = "",  // sports 或 crypto
-    
-    @Column(name = "amount", nullable = false, precision = 20, scale = 8)
-    val amount: BigDecimal = BigDecimal.ZERO,
-    
-    @Column(name = "status", nullable = false, length = 20)
-    val status: String = "",  // active, inactive
-    
-    @Column(name = "created_at", nullable = false)
-    val createdAt: Long = System.currentTimeMillis(),
-    
-    @Column(name = "updated_at", nullable = false)
-    var updatedAt: Long = System.currentTimeMillis()
-)
-```
-
-## 数值计算规范
-
-### BigDecimal使用
-- 所有数值计算必须使用 `BigDecimal`
-- 使用 `String` 存储数值
-- 使用扩展函数进行安全转换和比较
-
-```kotlin
-// 使用扩展函数
-val amount = "0.5".toSafeBigDecimal()
-val total = amount.add("0.4".toSafeBigDecimal())
-
-// 比较
-if (total.lt(BigDecimal.ONE)) {
-    // 业务逻辑
-}
-```
-
-## 时间字段规范
-
-### 时间戳使用
-- 所有时间字段使用 `Long` 类型存储毫秒级时间戳
-- **禁止**使用 `LocalDateTime` 或其他时间类型
-
-```kotlin
-// ✅ 正确
-@Column(name = "created_at", nullable = false)
-val createdAt: Long = System.currentTimeMillis()
-
-// ❌ 错误
-@Column(name = "created_at")
-val createdAt: LocalDateTime = LocalDateTime.now()  // 禁止使用
-```
-
-## HTTP客户端规范
-
-### Retrofit使用
-- 使用 Retrofit 定义 API 接口
-- 使用 OkHttp 作为底层 HTTP 客户端
-- 使用拦截器处理认证
-
-```kotlin
-// Polymarket CLOB API接口定义（跟单系统需要）
-interface PolymarketClobApi {
-    @POST("/orders")
-    suspend fun createOrder(@Body order: CreateOrderRequest): Response<OrderResponse>
-    
-    @GET("/orders/active")
-    suspend fun getActiveOrders(
-        @Query("market") market: String?,
-        @Query("limit") limit: Int?,
-        @Query("offset") offset: Int?
-    ): Response<List<OrderResponse>>
-    
-    @DELETE("/orders/{orderId}")
-    suspend fun cancelOrder(@Path("orderId") orderId: String): Response<CancelOrderResponse>
-    
-    @GET("/trades")
-    suspend fun getTrades(
-        @Query("market") market: String?,
-        @Query("user") user: String?,
-        @Query("limit") limit: Int?,
-        @Query("offset") offset: Int?
-    ): Response<List<TradeResponse>>
-}
-
-// Retrofit配置
-@Configuration
-class RetrofitConfig {
-    @Bean
-    fun polymarketClobApi(): PolymarketClobApi {
-        val okHttpClient = OkHttpClient.Builder()
-            .addInterceptor(AuthInterceptor())
-            .build()
-        
-        return Retrofit.Builder()
-            .baseUrl("https://clob.polymarket.com")
-            .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(PolymarketClobApi::class.java)
-    }
-}
-```
-
-## API接口规范
-
-### 请求规范
-- **所有接口统一使用POST方法**，包括查询类接口
-- 请求头: `Content-Type: application/json`
-- 请求体: JSON格式
-
-### 响应规范
-- **统一响应格式**:
+### 统一响应格式
 ```json
 {
   "code": 0,
@@ -398,77 +69,7 @@ class RetrofitConfig {
 }
 ```
 
-- **响应字段说明**:
-  - `code`: 响应码，0表示成功，非0表示失败
-  - `data`: 响应数据，可以是任意类型（对象、数组、字符串、数字等）
-  - `msg`: 响应消息，成功时通常为空，失败时包含错误提示
-
-### 响应示例
-
-**成功响应**:
-```json
-{
-  "code": 0,
-  "data": {
-    "id": "123",
-    "name": "example"
-  },
-  "msg": ""
-}
-```
-
-**失败响应**:
-```json
-{
-  "code": 1001,
-  "data": null,
-  "msg": "参数错误：参数不能为空"
-}
-```
-
-### Controller实现示例
-
-```kotlin
-@RestController
-@RequestMapping("/api/example")
-class ExampleController(
-    private val exampleService: ExampleService
-) {
-    private val logger = LoggerFactory.getLogger(ExampleController::class.java)
-    
-    @PostMapping("/list")
-    fun getList(@RequestBody request: ExampleListRequest): ResponseEntity<ApiResponse<ExampleListResponse>> {
-        return try {
-            val data = runBlocking { exampleService.getList(request) }
-            val response = ExampleListResponse(
-                list = data,
-                total = data.size.toLong(),
-                page = request.page ?: 1,
-                limit = request.limit ?: 20
-            )
-            ResponseEntity.ok(ApiResponse.success(response))
-        } catch (e: Exception) {
-            logger.error("Failed to get list", e)
-            ResponseEntity.ok(ApiResponse.serverError("获取列表失败：${e.message}"))
-        }
-    }
-}
-
-// 统一响应格式
-data class ApiResponse<T>(
-    val code: Int,
-    val data: T?,
-    val msg: String
-) {
-    companion object {
-        fun <T> success(data: T): ApiResponse<T> = ApiResponse(0, data, "")
-        fun <T> paramError(msg: String): ApiResponse<T> = ApiResponse(1001, null, msg)
-        fun <T> serverError(msg: String): ApiResponse<T> = ApiResponse(5001, null, msg)
-    }
-}
-```
-
-### 错误码规范
+### 错误码范围
 - `0`: 成功
 - `1001-1999`: 参数错误
 - `2001-2999`: 认证/权限错误
@@ -476,7 +77,131 @@ data class ApiResponse<T>(
 - `4001-4999`: 业务逻辑错误
 - `5001-5999`: 服务器内部错误
 
-详细错误码定义参见需求文档
+### Controller 示例
+```kotlin
+@RestController
+@RequestMapping("/api/example")
+class ExampleController(
+    private val exampleService: ExampleService,
+    private val messageSource: MessageSource
+) {
+    @PostMapping("/list")
+    fun getList(@RequestBody request: ExampleListRequest): ResponseEntity<ApiResponse<ExampleListResponse>> {
+        return try {
+            val data = runBlocking { exampleService.getList(request) }
+            ResponseEntity.ok(ApiResponse.success(data))
+        } catch (e: Exception) {
+            logger.error("Failed to get list", e)
+            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ERROR, messageSource))
+        }
+    }
+}
+```
+
+## 数值计算
+```kotlin
+val amount = "0.5".toSafeBigDecimal()
+val total = amount.add("0.4".toSafeBigDecimal())
+
+if (total.lt(BigDecimal.ONE)) {
+    // 业务逻辑
+}
+```
+
+## JSON 解析规范
+
+### 使用扩展函数（推荐）
+- **优先**使用扩展函数 `fromJson<T>()` 和 `toJson()`，禁止直接使用 `Gson`
+- 扩展函数提供了类型安全的解析，使用方便
+
+```kotlin
+// ✅ 正确：使用扩展函数（推荐）
+val json = "{\"name\":\"test\"}"
+val obj = json.fromJson<MyDataClass>()
+val jsonStr = obj.toJson()
+
+// ✅ 也可以：使用 JsonUtils 类（兼容旧代码）
+val obj = jsonUtils.fromJson<MyDataClass>(json)
+
+// ❌ 错误：直接使用 Gson
+val obj = gson.fromJson(json, MyDataClass::class.java)
+```
+
+### 扩展函数列表
+- `String?.fromJson<T>()` - 解析 JSON 字符串为对象（支持泛型）
+- `JsonElement?.fromJson<T>()` - 解析 JsonElement 为对象（支持泛型）
+- `Any?.toJson()` - 将对象转换为 JSON 字符串
+- `String?.parseStringArray()` - 解析 JSON 字符串数组
+
+### JsonUtils 类
+- `JsonUtils` 主要用于初始化全局 Gson 实例，供扩展函数使用
+- 保留 `parseStringArray()` 方法用于兼容旧代码
+- 不推荐直接使用 `JsonUtils` 的方法，优先使用扩展函数
+
+### Data Class 规范
+- **所有 data class 字段必须提供默认值**
+- 可空字段使用 `? = null`
+- 非空字段提供合适的默认值（空字符串、空集合、默认数值等）
+
+```kotlin
+// ✅ 正确：所有字段都有默认值
+data class MyDto(
+    val name: String = "",
+    val age: Int = 0,
+    val tags: List<String> = emptyList(),
+    val optional: String? = null
+)
+
+// ❌ 错误：缺少默认值
+data class MyDto(
+    val name: String,  // 缺少默认值
+    val age: Int = 0
+)
+```
+
+## Side 判断规范
+**禁止**使用 "YES"/"NO" 字符串判断 side
+
+```kotlin
+// ❌ 错误
+if (side != null && side.uppercase() == "NO") { }
+
+// ✅ 正确
+if (outcomeIndex != null && outcomeIndex == 1) { }
+```
+
+## 多语言规范
+- **禁止**硬编码中文或英文错误消息
+- **必须**使用 `ErrorCode` 枚举和 `MessageSource`
+
+```kotlin
+// ❌ 错误
+return ResponseEntity.ok(ApiResponse.paramError("配置ID不能为空"))
+
+// ✅ 正确
+return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, messageSource))
+```
+
+### 多语言支持范围
+1. **API 响应消息**: 使用 `ErrorCode` + `MessageSource`
+2. **日志消息**: 可使用中文或英文
+3. **代码注释**: 建议使用中文
+4. **数据库字段**: 使用英文（snake_case）
+
+## HTTP 客户端
+- 使用 Retrofit + OkHttp
+- 使用拦截器处理认证
+
+## 跟单系统需求
+参考文档: `docs/copy-trading-requirements.md`
+
+核心功能:
+- 账户管理（私钥导入，多账户）
+- Leader 管理
+- 订单同步与执行
+- 跟单配置管理
+- 风险控制
+- 跟单记录与统计
 
 ## 禁止事项
 
@@ -484,173 +209,25 @@ data class ApiResponse<T>(
 - ❌ 禁止使用 `!!` 除非有明确原因
 - ❌ 禁止忽略异常
 - ❌ 禁止硬编码配置值
-- ❌ 禁止提交敏感信息到Git
-- ❌ Controller 方法禁止使用 `suspend`
-- ❌ 实体类ID禁止使用 `Long = 0`
-- ❌ **禁止直接返回 mock 数据或硬编码的假数据**
-- ❌ **禁止在 API 调用失败时返回 mock 数据作为默认值**
-- ❌ **所有返回的数据必须来自真实的 API 调用或数据库查询**
-
-### 配置
-- ❌ 禁止使用 `application.yml`
-- ❌ 禁止在代码中硬编码配置值
+- ❌ 禁止提交敏感信息到 Git
 
 ### 类型
 - ❌ 禁止使用 `Double` 进行数值计算
 - ❌ 禁止使用 `LocalDateTime` 存储时间
-- ❌ 禁止实体类ID使用非空默认值
+- ❌ 禁止实体类 ID 使用非空默认值
+- ❌ 禁止直接使用 `Gson`（必须使用 `JsonUtils`）
+- ❌ 禁止 data class 字段缺少默认值
 
-### API接口
-- ❌ 禁止使用GET、PUT、DELETE等方法（统一使用POST）
+### API 接口
+- ❌ 禁止使用 GET/PUT/DELETE（统一使用 POST）
 - ❌ 禁止返回不符合统一格式的响应
-- ❌ 禁止在响应中直接返回Map类型（使用data class）
+- ❌ 禁止在响应中直接返回 Map 类型
 
-### Side 判断规范
-- ❌ **禁止使用 "YES" 或 "NO" 字符串去判断 side**
-- ✅ **必须使用 `outcomeIndex` 来判断方向**（0 = 第一个 outcome，1 = 第二个 outcome，以此类推）
-- ✅ 如果必须使用 side 字符串，应该从市场的 outcomes 数组中获取，而不是硬编码 "YES"/"NO"
-- ✅ 对于二元市场的价格转换，应该通过 `outcomeIndex` 判断是否为第二个 outcome（index = 1），而不是判断 side 是否为 "NO"
+### Side 判断
+- ❌ 禁止使用 "YES"/"NO" 字符串判断 side
+- ✅ 必须使用 `outcomeIndex` 判断
 
-```kotlin
-// ❌ 错误：使用字符串比较判断 side
-if (side != null && side.uppercase() == "NO") {
-    // 转换价格
-}
-
-// ❌ 错误：硬编码 "YES"/"NO" 判断
-when (side.uppercase()) {
-    "YES" -> // ...
-    "NO" -> // ...
-}
-
-// ✅ 正确：使用 outcomeIndex 判断
-if (outcomeIndex != null && outcomeIndex == 1) {
-    // 第二个 outcome（在二元市场中通常是 NO），转换价格
-}
-
-// ✅ 正确：从市场 outcomes 获取 side 信息
-val outcomes = JsonUtils.parseStringArray(market.outcomes)
-val targetOutcomeIndex = outcomes.indexOfFirst { it.equals(side, ignoreCase = true) }
-if (targetOutcomeIndex >= 0) {
-    // 使用 targetOutcomeIndex 进行判断
-}
-```
-
-## 多语言使用规范
-
-### 错误消息和响应文本
-- **禁止**在代码中硬编码中文或英文错误消息
-- **必须**使用 `ErrorCode` 枚举定义错误码和消息
-- **必须**使用 `ApiResponse.error(ErrorCode, messageSource)` 或 `MessageUtils.getMessage()` 获取国际化消息
-- **禁止**直接使用 `ApiResponse.paramError("硬编码消息")` 或 `ApiResponse.serverError("硬编码消息")`
-- 错误消息的默认语言使用中文（在 `ErrorCode` 枚举中定义），通过 `MessageSource` 支持多语言
-
-### 使用 ErrorCode 和 MessageSource
-项目已经实现了国际化支持，必须使用以下方式：
-
-```kotlin
-// ❌ 错误：硬编码错误消息
-return ResponseEntity.ok(ApiResponse.paramError("配置ID不能为空"))
-return ResponseEntity.ok(ApiResponse.serverError("获取配置列表失败：${e.message}"))
-
-// ✅ 正确：使用 ErrorCode 枚举
-return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, messageSource = messageSource))
-
-// ✅ 正确：使用 ErrorCode 和自定义消息（如果需要动态消息）
-return ResponseEntity.ok(ApiResponse.error(
-    ErrorCode.PARAM_ERROR, 
-    customMsg = "配置ID不能为空",
-    messageSource = messageSource
-))
-
-// ✅ 正确：使用 MessageUtils
-@Autowired
-private lateinit var messageUtils: MessageUtils
-
-return ResponseEntity.ok(ApiResponse.error(
-    ErrorCode.PARAM_EMPTY,
-    messageSource = messageSource
-))
-```
-
-### 添加新的错误码
-如果需要添加新的错误码，必须在 `ErrorCode` 枚举中定义：
-
-```kotlin
-enum class ErrorCode(
-    val code: Int,
-    val message: String,  // 默认消息（中文）
-    val messageKey: String  // 国际化消息键
-) {
-    // 新错误码示例
-    NOTIFICATION_CONFIG_NOT_FOUND(3009, "通知配置不存在", "error.notification_config_not_found"),
-    NOTIFICATION_CONFIG_INVALID(4009, "通知配置无效", "error.notification_config_invalid"),
-}
-```
-
-然后在语言资源文件中添加对应的翻译：
-- `src/main/resources/messages_zh_CN.properties`
-- `src/main/resources/messages_zh_TW.properties`
-- `src/main/resources/messages_en.properties`
-
-### 日志消息规范
-- **日志消息可以使用中文或英文**，便于开发调试
-- **禁止**在日志中硬编码用户可见的错误消息（应该使用 ErrorCode）
-- 日志消息应该清晰、简洁，便于排查问题
-- 日志中的业务数据（如账户名、订单ID等）可以使用原始值
-
-### 代码注释规范
-- **代码注释可以使用中文或英文**
-- **业务逻辑注释**建议使用中文，便于团队理解
-- **API 文档注释**（KDoc）建议使用中文，但也可以使用英文
-- **类和方法注释**应该清晰说明功能和参数
-
-### 数据库字段和配置
-- **数据库字段名**使用英文（snake_case）
-- **配置项名称**使用英文（kebab-case 或 dot.notation）
-- **枚举值**使用英文（UPPER_SNAKE_CASE）
-- **常量定义**使用英文（UPPER_SNAKE_CASE）
-
-### 多语言支持策略
-1. **API 响应消息**：使用 `ErrorCode` 枚举，通过 `MessageSource` 支持多语言
-2. **错误码**：使用 `ErrorCode` 枚举，包含 `code`、`message`（默认中文）和 `messageKey`（国际化键）
-3. **日志消息**：可以使用中文或英文，便于开发调试
-4. **代码注释**：可以使用中文或英文，建议使用中文
-5. **业务数据**：根据实际需求，可以包含多语言内容（如市场标题、描述等）
-
-### Controller 中使用多语言示例
-
-```kotlin
-@RestController
-class NotificationController(
-    private val notificationConfigService: NotificationConfigService,
-    private val messageSource: MessageSource  // 注入 MessageSource
-) {
-    @PostMapping("/configs/list")
-    fun list(@RequestBody request: NotificationConfigListRequest): ResponseEntity<ApiResponse<List<NotificationConfigDto>>> {
-        return try {
-            // ... 业务逻辑
-            ResponseEntity.ok(ApiResponse.success(configs))
-        } catch (e: Exception) {
-            logger.error("获取配置列表失败: ${e.message}", e)
-            // ✅ 正确：使用 ErrorCode 和 MessageSource
-            ResponseEntity.ok(ApiResponse.error(
-                ErrorCode.SERVER_ERROR,
-                messageSource = messageSource
-            ))
-        }
-    }
-    
-    @PostMapping("/configs/detail")
-    fun detail(@RequestBody request: NotificationConfigDetailRequest): ResponseEntity<ApiResponse<NotificationConfigDto>> {
-        if (request.id == null) {
-            // ✅ 正确：使用 ErrorCode
-            return ResponseEntity.ok(ApiResponse.error(
-                ErrorCode.PARAM_EMPTY,
-                messageSource = messageSource
-            ))
-        }
-        // ... 业务逻辑
-    }
-}
-```
+### 数据源
+- ❌ 禁止直接返回 mock 数据
+- ❌ 禁止在 API 调用失败时返回 mock 数据
+- ✅ 所有数据必须来自真实 API 或数据库查询

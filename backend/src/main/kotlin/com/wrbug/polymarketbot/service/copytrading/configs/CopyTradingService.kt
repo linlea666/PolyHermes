@@ -9,6 +9,8 @@ import com.wrbug.polymarketbot.repository.CopyTradingRepository
 import com.wrbug.polymarketbot.repository.CopyTradingTemplateRepository
 import com.wrbug.polymarketbot.repository.LeaderRepository
 import com.wrbug.polymarketbot.service.copytrading.monitor.CopyTradingMonitorService
+import com.google.gson.Gson
+import com.wrbug.polymarketbot.util.JsonUtils
 import com.wrbug.polymarketbot.util.toSafeBigDecimal
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -24,7 +26,9 @@ class CopyTradingService(
     private val accountRepository: AccountRepository,
     private val templateRepository: CopyTradingTemplateRepository,
     private val leaderRepository: LeaderRepository,
-    private val monitorService: CopyTradingMonitorService
+    private val monitorService: CopyTradingMonitorService,
+    private val jsonUtils: JsonUtils,
+    private val gson: Gson
 ) {
     
     private val logger = LoggerFactory.getLogger(CopyTradingService::class.java)
@@ -46,16 +50,7 @@ class CopyTradingService(
             val leader = leaderRepository.findById(request.leaderId).orElse(null)
                 ?: return Result.failure(IllegalArgumentException("Leader 不存在"))
             
-            // 3. 检查是否已存在相同的跟单关系（accountId + leaderId）
-            val existing = copyTradingRepository.findByAccountIdAndLeaderId(
-                request.accountId,
-                request.leaderId
-            )
-            if (existing != null) {
-                return Result.failure(IllegalArgumentException("该跟单关系已存在"))
-            }
-            
-            // 4. 验证配置名（强校验：不能为空字符串）
+            // 3. 验证配置名（强校验：不能为空字符串）
             val configName = request.configName?.trim()
             if (configName.isNullOrBlank()) {
                 return Result.failure(IllegalArgumentException("配置名不能为空"))
@@ -88,7 +83,10 @@ class CopyTradingService(
                     minPrice = request.minPrice?.toSafeBigDecimal() ?: template.minPrice,
                     maxPrice = request.maxPrice?.toSafeBigDecimal() ?: template.maxPrice,
                     maxPositionValue = request.maxPositionValue?.toSafeBigDecimal(),
-                    maxPositionCount = request.maxPositionCount
+                    maxPositionCount = request.maxPositionCount,
+                    keywordFilterMode = request.keywordFilterMode ?: "DISABLED",
+                    keywords = convertKeywordsToJson(request.keywords),
+                    maxMarketEndDate = request.maxMarketEndDate
                 )
             } else {
                 // 手动输入（所有字段必须提供）
@@ -116,7 +114,10 @@ class CopyTradingService(
                     minPrice = request.minPrice?.toSafeBigDecimal(),
                     maxPrice = request.maxPrice?.toSafeBigDecimal(),
                     maxPositionValue = request.maxPositionValue?.toSafeBigDecimal(),
-                    maxPositionCount = request.maxPositionCount
+                    maxPositionCount = request.maxPositionCount,
+                    keywordFilterMode = request.keywordFilterMode ?: "DISABLED",
+                    keywords = convertKeywordsToJson(request.keywords),
+                    maxMarketEndDate = request.maxMarketEndDate
                 )
             }
             
@@ -145,8 +146,11 @@ class CopyTradingService(
                 maxPrice = config.maxPrice,
                 maxPositionValue = config.maxPositionValue,
                 maxPositionCount = config.maxPositionCount,
+                keywordFilterMode = config.keywordFilterMode,
+                keywords = config.keywords,
                 configName = configName,
-                pushFailedOrders = request.pushFailedOrders ?: false
+                pushFailedOrders = request.pushFailedOrders ?: false,
+                maxMarketEndDate = config.maxMarketEndDate
             )
             
             val saved = copyTradingRepository.save(copyTrading)
@@ -213,8 +217,17 @@ class CopyTradingService(
                 maxPrice = request.maxPrice?.toSafeBigDecimal() ?: copyTrading.maxPrice,
                 maxPositionValue = request.maxPositionValue?.toSafeBigDecimal() ?: copyTrading.maxPositionValue,
                 maxPositionCount = request.maxPositionCount ?: copyTrading.maxPositionCount,
+                keywordFilterMode = request.keywordFilterMode ?: copyTrading.keywordFilterMode,
+                keywords = if (request.keywords != null) {
+                    convertKeywordsToJson(request.keywords)
+                } else if (request.keywordFilterMode != null && request.keywordFilterMode == "DISABLED") {
+                    null
+                } else {
+                    copyTrading.keywords
+                },
                 configName = configName,
                 pushFailedOrders = request.pushFailedOrders ?: copyTrading.pushFailedOrders,
+                maxMarketEndDate = request.maxMarketEndDate ?: copyTrading.maxMarketEndDate,
                 updatedAt = System.currentTimeMillis()
             )
             
@@ -264,11 +277,10 @@ class CopyTradingService(
         return try {
             val copyTradings = when {
                 request.accountId != null && request.leaderId != null -> {
-                    val found = copyTradingRepository.findByAccountIdAndLeaderId(
+                    copyTradingRepository.findByAccountIdAndLeaderId(
                         request.accountId,
                         request.leaderId
                     )
-                    if (found != null) listOf(found) else emptyList()
                 }
                 request.accountId != null -> {
                     copyTradingRepository.findByAccountId(request.accountId)
@@ -424,11 +436,44 @@ class CopyTradingService(
             maxPrice = copyTrading.maxPrice?.toPlainString(),
             maxPositionValue = copyTrading.maxPositionValue?.toPlainString(),
             maxPositionCount = copyTrading.maxPositionCount,
+            keywordFilterMode = copyTrading.keywordFilterMode,
+            keywords = convertJsonToKeywords(copyTrading.keywords),
             configName = copyTrading.configName,
             pushFailedOrders = copyTrading.pushFailedOrders,
+            maxMarketEndDate = copyTrading.maxMarketEndDate,
             createdAt = copyTrading.createdAt,
             updatedAt = copyTrading.updatedAt
         )
+    }
+    
+    /**
+     * 将关键字列表转换为 JSON 字符串
+     */
+    private fun convertKeywordsToJson(keywords: List<String>?): String? {
+        if (keywords == null || keywords.isEmpty()) {
+            return null
+        }
+        return try {
+            gson.toJson(keywords)
+        } catch (e: Exception) {
+            logger.error("转换关键字列表为 JSON 失败", e)
+            null
+        }
+    }
+    
+    /**
+     * 将 JSON 字符串转换为关键字列表
+     */
+    private fun convertJsonToKeywords(jsonString: String?): List<String>? {
+        if (jsonString.isNullOrBlank()) {
+            return null
+        }
+        return try {
+            jsonUtils.parseStringArray(jsonString)
+        } catch (e: Exception) {
+            logger.error("解析关键字 JSON 失败", e)
+            null
+        }
     }
     
     /**
@@ -454,6 +499,9 @@ class CopyTradingService(
         val minPrice: BigDecimal?,
         val maxPrice: BigDecimal?,
         val maxPositionValue: BigDecimal?,
-        val maxPositionCount: Int?
+        val maxPositionCount: Int?,
+        val keywordFilterMode: String,
+        val keywords: String?,  // JSON 字符串
+        val maxMarketEndDate: Long?  // 市场截止时间限制（毫秒时间戳）
     )
 }
