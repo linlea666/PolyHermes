@@ -31,8 +31,6 @@ class CopyTradingStatisticsService(
     private val sellMatchDetailRepository: SellMatchDetailRepository,
     private val accountRepository: AccountRepository,
     private val leaderRepository: LeaderRepository,
-    private val accountService: AccountService,
-    private val blockchainService: BlockchainService,
     private val marketService: com.wrbug.polymarketbot.service.common.MarketService
 ) {
     
@@ -63,19 +61,12 @@ class CopyTradingStatisticsService(
             // 6. 计算统计信息
             val statistics = calculateStatistics(buyOrders, sellRecords, matchDetails)
             
-            // 7. 获取链上实际持仓（用于准确计算未实现盈亏，考虑手动卖出的情况）
-            val actualPositions = getActualPositions(account)
+            // 7. 不再计算未实现盈亏和持仓价值（优化性能）
+            // 未实现盈亏计算需要查询链上持仓和市场价格，性能开销大
+            val unrealizedPnl = "0"
+            val positionValue = "0"
             
-            // 8. 获取当前市场价格（用于计算未实现盈亏）
-            val currentPrice = getCurrentMarketPrice(buyOrders)
-            
-            // 9. 计算未实现盈亏（使用链上实际持仓，而不是 remainingQuantity）
-            val unrealizedPnl = calculateUnrealizedPnl(buyOrders, currentPrice, actualPositions)
-            
-            // 10. 计算持仓价值（使用链上实际持仓和当前价格）
-            val positionValue = calculatePositionValue(buyOrders, currentPrice, actualPositions)
-            
-            // 11. 构建响应
+            // 8. 构建响应（总盈亏 = 已实现盈亏）
             val response = CopyTradingStatisticsResponse(
                 copyTradingId = copyTradingId,
                 accountId = copyTrading.accountId,
@@ -94,8 +85,8 @@ class CopyTradingStatisticsService(
                 currentPositionValue = positionValue,
                 totalRealizedPnl = statistics.totalRealizedPnl,
                 totalUnrealizedPnl = unrealizedPnl,
-                totalPnl = (statistics.totalRealizedPnl.toSafeBigDecimal().add(unrealizedPnl.toSafeBigDecimal())).toString(),
-                totalPnlPercent = calculatePnlPercent(statistics.totalBuyAmount, statistics.totalRealizedPnl, unrealizedPnl)
+                totalPnl = statistics.totalRealizedPnl,
+                totalPnlPercent = calculatePnlPercentOnlyRealized(statistics.totalBuyAmount, statistics.totalRealizedPnl)
             )
             
             Result.success(response)
@@ -358,200 +349,16 @@ class CopyTradingStatisticsService(
     }
     
     /**
-     * 获取当前市场价格
-     * 按 (marketId, outcomeIndex) 组合获取价格，支持多元市场
+     * 计算盈亏百分比（仅基于已实现盈亏）
      */
-    private suspend fun getCurrentMarketPrice(buyOrders: List<CopyOrderTracking>): Map<String, String> {
-        val prices = mutableMapOf<String, String>()
-        
-        // 获取所有不同的 (marketId, outcomeIndex) 组合
-        val marketOutcomePairs = buyOrders
-            .filter { it.outcomeIndex != null }
-            .map { Pair(it.marketId, it.outcomeIndex!!) }
-            .distinct()
-        
-        for ((marketId, outcomeIndex) in marketOutcomePairs) {
-            try {
-                // 传递 outcomeIndex 参数，确保获取对应 outcome 的价格
-                val result = accountService.getMarketPrice(marketId, outcomeIndex)
-                result.onSuccess { response ->
-                    // 使用当前价格
-                    val price = response.currentPrice
-                    if (price.isNotBlank() && price != "0") {
-                        // 使用 "marketId:outcomeIndex" 作为 key
-                        val key = "$marketId:$outcomeIndex"
-                        prices[key] = price
-                    }
-                }
-            } catch (e: Exception) {
-                logger.warn("获取市场价格失败: marketId=$marketId, outcomeIndex=$outcomeIndex", e)
-            }
-        }
-        
-        return prices
-    }
-    
-    /**
-     * 获取链上实际持仓
-     * 按 (marketId, outcomeIndex) 组合返回实际持仓数量
-     */
-    private suspend fun getActualPositions(account: Account?): Map<String, BigDecimal> {
-        val positions = mutableMapOf<String, BigDecimal>()
-        
-        if (account == null || account.proxyAddress.isBlank()) {
-            return positions
-        }
-        
-        try {
-            val positionsResult = blockchainService.getPositions(account.proxyAddress)
-            if (positionsResult.isSuccess) {
-                val positionList = positionsResult.getOrNull() ?: emptyList()
-                for (pos in positionList) {
-                    // 只处理有 conditionId 和 outcomeIndex 的仓位
-                    if (pos.conditionId != null && pos.outcomeIndex != null && pos.size != null) {
-                        val key = "${pos.conditionId}:${pos.outcomeIndex}"
-                        val size = pos.size.toSafeBigDecimal()
-                        // 如果 size > 0，表示有持仓；如果 size < 0，表示做空（取绝对值）
-                        positions[key] = size.abs()
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            logger.warn("获取链上持仓失败: accountId=${account.id}, error=${e.message}", e)
-        }
-        
-        return positions
-    }
-    
-    /**
-     * 计算未实现盈亏
-     * 使用链上实际持仓数量，而不是 remainingQuantity（考虑手动卖出的情况）
-     * 按市场聚合订单，计算加权平均买入价格，避免重复计算
-     */
-    private fun calculateUnrealizedPnl(
-        buyOrders: List<CopyOrderTracking>,
-        currentPrices: Map<String, String>,
-        actualPositions: Map<String, BigDecimal>
-    ): String {
-        var totalUnrealizedPnl = BigDecimal.ZERO
-        
-        // 按市场聚合订单，计算加权平均买入价格
-        val marketAggregates = mutableMapOf<String, Pair<BigDecimal, BigDecimal>>() // key -> (总持仓, 总成本)
-        
-        for (order in buyOrders) {
-            // 如果没有 outcomeIndex，跳过（无法确定价格和持仓）
-            if (order.outcomeIndex == null) {
-                logger.warn("订单缺少 outcomeIndex，跳过未实现盈亏计算: orderId=${order.buyOrderId}, marketId=${order.marketId}")
-                continue
-            }
-            
-            // 使用 "marketId:outcomeIndex" 作为 key
-            val key = "${order.marketId}:${order.outcomeIndex}"
-            
-            // 获取订单的持仓数量（使用 remainingQuantity，因为这是该订单的持仓）
-            val orderQty = order.remainingQuantity.toSafeBigDecimal()
-            
-            // 如果订单持仓 <= 0，跳过
-            if (orderQty.lte(BigDecimal.ZERO)) continue
-            
-            val buyPrice = order.price.toSafeBigDecimal()
-            val orderCost = orderQty.multi(buyPrice)
-            
-            // 聚合同一市场的订单
-            val existing = marketAggregates[key]
-            if (existing != null) {
-                val totalQty = existing.first.add(orderQty)
-                val totalCost = existing.second.add(orderCost)
-                marketAggregates[key] = Pair(totalQty, totalCost)
-            } else {
-                marketAggregates[key] = Pair(orderQty, orderCost)
-            }
-        }
-        
-        // 计算每个市场的未实现盈亏
-        for ((key, aggregate) in marketAggregates) {
-            val (totalQty, totalCost) = aggregate
-            
-            // 获取链上实际持仓数量（如果存在），否则使用聚合的持仓数量
-            val actualQty = actualPositions[key] ?: totalQty
-            
-            // 如果实际持仓 <= 0，说明已全部卖出（包括手动卖出），跳过未实现盈亏计算
-            if (actualQty.lte(BigDecimal.ZERO)) continue
-            
-            // 获取当前市场价格
-            val currentPrice = currentPrices[key]?.toSafeBigDecimal()
-                ?: continue  // 如果没有当前价格，跳过
-            
-            // 计算加权平均买入价格
-            val avgBuyPrice = if (totalQty.gt(BigDecimal.ZERO)) {
-                totalCost.div(totalQty)
-            } else {
-                continue
-            }
-            
-            // 使用实际持仓数量和加权平均买入价格计算未实现盈亏
-            val unrealizedPnl = currentPrice.subtract(avgBuyPrice).multi(actualQty)
-            totalUnrealizedPnl = totalUnrealizedPnl.add(unrealizedPnl)
-        }
-        
-        return totalUnrealizedPnl.toString()
-    }
-    
-    /**
-     * 计算持仓价值
-     * 使用链上实际持仓数量和当前市场价格计算
-     * 按市场聚合，避免重复计算
-     */
-    private fun calculatePositionValue(
-        buyOrders: List<CopyOrderTracking>,
-        currentPrices: Map<String, String>,
-        actualPositions: Map<String, BigDecimal>
-    ): String {
-        var totalPositionValue = BigDecimal.ZERO
-        
-        // 按市场聚合，获取所有不同的市场
-        val marketKeys = buyOrders
-            .filter { it.outcomeIndex != null }
-            .map { "${it.marketId}:${it.outcomeIndex}" }
-            .distinct()
-        
-        for (key in marketKeys) {
-            // 获取链上实际持仓数量（如果存在）
-            val actualQty = actualPositions[key]
-            
-            // 如果没有链上持仓，计算该市场的总持仓（所有订单的 remainingQuantity 之和）
-            val totalQty = actualQty ?: buyOrders
-                .filter { it.outcomeIndex != null && "${it.marketId}:${it.outcomeIndex}" == key }
-                .sumOf { it.remainingQuantity.toSafeBigDecimal() }
-            
-            // 如果持仓 <= 0，跳过
-            if (totalQty.lte(BigDecimal.ZERO)) continue
-            
-            // 获取当前市场价格
-            val currentPrice = currentPrices[key]?.toSafeBigDecimal()
-                ?: continue  // 如果没有当前价格，跳过
-            
-            // 计算持仓价值：持仓数量 × 当前价格
-            val positionValue = totalQty.multi(currentPrice)
-            totalPositionValue = totalPositionValue.add(positionValue)
-        }
-        
-        return totalPositionValue.toString()
-    }
-    
-    /**
-     * 计算盈亏百分比
-     */
-    private fun calculatePnlPercent(
+    private fun calculatePnlPercentOnlyRealized(
         totalBuyAmount: String,
-        totalRealizedPnl: String,
-        totalUnrealizedPnl: String
+        totalRealizedPnl: String
     ): String {
         val buyAmount = totalBuyAmount.toSafeBigDecimal()
         if (buyAmount.lte(BigDecimal.ZERO)) return "0"
         
-        val totalPnl = totalRealizedPnl.toSafeBigDecimal().add(totalUnrealizedPnl.toSafeBigDecimal())
-        val percent = totalPnl.div(buyAmount).multi(100)
+        val percent = totalRealizedPnl.toSafeBigDecimal().div(buyAmount).multi(100)
         
         return percent.setScale(2, RoundingMode.HALF_UP).toString()
     }
