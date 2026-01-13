@@ -71,12 +71,20 @@ class CopyTradingFilterService(
             }
         }
         
-        // 3. 检查是否需要获取订单簿
-        // 只有在配置了需要订单簿的过滤条件时才获取
+        // 3. 检查是否需要获取订单簿或需要执行仓位检查
+        // 只有在配置了需要订单簿的过滤条件时才获取订单簿
         val needOrderbook = copyTrading.maxSpread != null || copyTrading.minOrderDepth != null
         
+        // 3.5. 如果不需要订单簿，则跳过订单簿相关的检查，但仍然需要检查仓位限制
         if (!needOrderbook) {
-            // 不需要订单簿，直接通过
+            // 仓位检查（如果配置了最大仓位限制且提供了跟单金额和市场ID）
+            if (copyOrderAmount != null && marketId != null) {
+                val positionCheck = checkPositionLimits(copyTrading, copyOrderAmount, marketId)
+                if (!positionCheck.isPassed) {
+                    return positionCheck
+                }
+            }
+            // 通过所有检查
             return FilterResult.passed()
         }
         
