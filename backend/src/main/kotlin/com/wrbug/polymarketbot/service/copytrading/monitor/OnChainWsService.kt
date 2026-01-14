@@ -1,5 +1,7 @@
 package com.wrbug.polymarketbot.service.copytrading.monitor
 
+import com.github.benmanes.caffeine.cache.Cache
+import com.github.benmanes.caffeine.cache.Caffeine
 import com.google.gson.JsonNull
 import com.wrbug.polymarketbot.api.*
 import com.wrbug.polymarketbot.entity.Leader
@@ -12,6 +14,7 @@ import okhttp3.OkHttpClient
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 /**
  * 链上 WebSocket 监听服务
@@ -29,6 +32,11 @@ class OnChainWsService(
 
     // 存储需要监听的Leader：leaderId -> Leader
     private val monitoredLeaders = ConcurrentHashMap<Long, Leader>()
+
+    // 存储已处理的交易哈希，用于去重（LRU 缓存，保留最近 100 条）
+    private val processedTxHashes: Cache<String, Long> = Caffeine.newBuilder()
+        .maximumSize(100)
+        .build()
 
     /**
      * 启动链上 WebSocket 监听
@@ -94,6 +102,14 @@ class OnChainWsService(
         rpcApi: EthereumRpcApi
     ) {
         val leader = monitoredLeaders[leaderId] ?: return
+
+        // 根据 txHash 去重（使用原子操作避免竞态条件）
+        val currentTime = System.currentTimeMillis()
+        val existingTimestamp = processedTxHashes.asMap().putIfAbsent(txHash, currentTime)
+        if (existingTimestamp != null) {
+            logger.debug("交易已处理过，跳过: leaderId=$leaderId, txHash=$txHash, firstProcessedAt=$existingTimestamp")
+            return
+        }
 
         logger.debug("开始处理 Leader 交易: leaderId=$leaderId, txHash=$txHash, leaderAddress=${leader.leaderAddress}")
 

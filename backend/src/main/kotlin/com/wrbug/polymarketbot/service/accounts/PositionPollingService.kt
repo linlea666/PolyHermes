@@ -21,29 +21,29 @@ import java.util.concurrent.CopyOnWriteArrayList
 class PositionPollingService(
     private val accountService: AccountService
 ) {
-    
+
     private val logger = LoggerFactory.getLogger(PositionPollingService::class.java)
-    
+
     @Value("\${position.polling.interval:2000}")
     private var pollingInterval: Long = 2000  // 轮训间隔（毫秒），默认2秒
-    
+
     // 订阅者列表（支持多个订阅者）
     private val subscribers = CopyOnWriteArrayList<(PositionListResponse) -> Unit>()
-    
+
     // 最新仓位数据（用于丢弃机制）
     @Volatile
     private var latestPositions: PositionListResponse? = null
-    
+
     // 协程作用域和任务
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var pollingJob: Job? = null
-    
+
     // 事件分发协程（使用专门的线程，避免阻塞轮训）
     private val eventDispatcherScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    
+
     // 同步锁，确保轮询任务的启动和停止是线程安全的
     private val lock = Any()
-    
+
     /**
      * 初始化服务（后端启动时直接启动轮训）
      */
@@ -52,7 +52,7 @@ class PositionPollingService(
         logger.info("PositionPollingService 初始化，启动仓位轮训任务，轮训间隔: ${pollingInterval}ms")
         startPolling()
     }
-    
+
     /**
      * 清理资源
      */
@@ -66,7 +66,7 @@ class PositionPollingService(
         scope.cancel()
         eventDispatcherScope.cancel()
     }
-    
+
     /**
      * 订阅仓位事件
      * @param callback 回调函数，接收最新的仓位数据
@@ -78,7 +78,7 @@ class PositionPollingService(
             latestPositions?.let { callback(it) }
         }
     }
-    
+
     /**
      * 取消订阅仓位事件
      */
@@ -87,7 +87,7 @@ class PositionPollingService(
             subscribers.remove(callback)
         }
     }
-    
+
     /**
      * 启动轮训任务
      */
@@ -95,7 +95,7 @@ class PositionPollingService(
         synchronized(lock) {
             // 如果已经有轮训任务在运行，先取消
             pollingJob?.cancel()
-            
+
             // 启动新的轮训任务
             pollingJob = scope.launch {
                 while (isActive) {
@@ -109,7 +109,7 @@ class PositionPollingService(
             }
         }
     }
-    
+
     /**
      * 轮训仓位数据并发布事件
      * 使用专门的线程分发事件，避免阻塞轮训
@@ -123,7 +123,7 @@ class PositionPollingService(
                 if (positions != null) {
                     // 更新最新数据（丢弃旧数据，只保留最新的）
                     latestPositions = positions
-                    
+
                     // 在专门的线程中分发事件，避免阻塞轮训
                     eventDispatcherScope.launch {
                         try {
@@ -131,7 +131,7 @@ class PositionPollingService(
                             val currentSubscribers = synchronized(lock) {
                                 subscribers.toList()  // 复制列表，避免并发修改
                             }
-                            
+
                             currentSubscribers.forEach { callback ->
                                 try {
                                     callback(positions)
@@ -139,8 +139,6 @@ class PositionPollingService(
                                     logger.error("通知订阅者失败: ${e.message}", e)
                                 }
                             }
-                            
-                            logger.debug("发布仓位数据事件: currentPositions=${positions.currentPositions.size}, historyPositions=${positions.historyPositions.size}, subscribers=${currentSubscribers.size}")
                         } catch (e: Exception) {
                             logger.error("分发仓位数据事件失败: ${e.message}", e)
                         }
