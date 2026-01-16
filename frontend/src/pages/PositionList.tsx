@@ -40,6 +40,8 @@ const PositionList: React.FC = () => {
   const [redeemableSummary, setRedeemableSummary] = useState<RedeemablePositionsSummary | null>(null)
   const [loadingRedeemableSummary, setLoadingRedeemableSummary] = useState(false)
   const [redeeming, setRedeeming] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   
   useEffect(() => {
     fetchAccounts()
@@ -66,6 +68,11 @@ const PositionList: React.FC = () => {
       fetchRedeemableSummary()
     }
   }, [currentPositions, selectedAccountId])
+
+  // 当筛选条件或搜索关键词变化时，重置分页到第一页
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [positionFilter, selectedAccountId, searchKeyword])
   
   // 获取可赎回仓位统计
   const fetchRedeemableSummary = async () => {
@@ -265,12 +272,12 @@ const PositionList: React.FC = () => {
   // 本地搜索和筛选过滤
   const filteredPositions = useMemo(() => {
     let filtered = basePositions
-    
+
     // 1. 先按账户筛选
     if (selectedAccountId !== undefined) {
       filtered = filtered.filter(p => p.accountId === selectedAccountId)
     }
-    
+
     // 2. 最后按关键词搜索
     if (searchKeyword.trim()) {
       const keyword = searchKeyword.trim().toLowerCase()
@@ -302,9 +309,16 @@ const PositionList: React.FC = () => {
         return false
       })
     }
-    
+
     return filtered
   }, [basePositions, searchKeyword, selectedAccountId])
+
+  // 分页后的数据
+  const paginatedPositions = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize
+    const endIndex = startIndex + pageSize
+    return filteredPositions.slice(startIndex, endIndex)
+  }, [filteredPositions, currentPage, pageSize])
   
   const getSideColor = (side: string) => {
     return side === 'YES' ? 'green' : 'red'
@@ -349,14 +363,32 @@ const PositionList: React.FC = () => {
       if (!isNaN(initialValue)) {
         totalInitialValue += initialValue
       }
+
+      // 当前仓位：统计持仓价值
+      // 历史仓位：currentValue 应该为 0（已平仓）
       if (!isNaN(currentValue)) {
         totalCurrentValue += currentValue
       }
-      if (!isNaN(pnl)) {
-        totalPnl += pnl
-      }
-      if (!isNaN(realizedPnl)) {
-        totalRealizedPnl += realizedPnl
+
+      // 对于当前仓位：
+      //   - pnl：未实现盈亏（浮动盈亏）
+      //   - realizedPnl：已实现盈亏（部分平仓时产生）
+      // 对于历史仓位：
+      //   - pnl：总已实现盈亏（包含部分平仓 + 完全平仓）
+      //   - realizedPnl：部分平仓的已实现盈亏（可能与 pnl 重复）
+      if (pos.isCurrent) {
+        // 当前仓位：未实现盈亏 + 已实现盈亏
+        if (!isNaN(pnl)) {
+          totalPnl += pnl
+        }
+        if (!isNaN(realizedPnl)) {
+          totalRealizedPnl += realizedPnl
+        }
+      } else {
+        // 历史仓位：pnl 是总已实现盈亏，realizedPnl 可能重复，所以只统计 pnl
+        if (!isNaN(pnl)) {
+          totalRealizedPnl += pnl
+        }
       }
     })
 
@@ -516,10 +548,10 @@ const PositionList: React.FC = () => {
 
   // 渲染卡片视图
   const renderCardView = () => {
-    if (filteredPositions.length === 0) {
+    if (paginatedPositions.length === 0) {
       return (
-        <Empty 
-          description="暂无仓位数据" 
+        <Empty
+          description="暂无仓位数据"
           style={{ padding: '60px 0' }}
         />
       )
@@ -527,7 +559,7 @@ const PositionList: React.FC = () => {
 
     return (
       <Row gutter={[16, 16]}>
-        {filteredPositions.map((position, index) => {
+        {paginatedPositions.map((position, index) => {
           const pnlNum = parseFloat(position.pnl || '0')
           const isProfit = pnlNum >= 0
           // 只有当前仓位才根据盈亏显示边框颜色
@@ -1235,8 +1267,8 @@ const PositionList: React.FC = () => {
             )}
           </div>
         </div>
-        {/* 合计信息：开仓价值、当前价值、盈亏、已实现盈亏（基于当前筛选后的仓位） */}
-        {filteredPositions.length > 0 && (
+        {/* 合计信息：开仓价值、当前价值、盈亏、已实现盈亏（仅当前仓位显示） */}
+        {filteredPositions.length > 0 && positionFilter === 'current' && (
           <div
             style={{
               marginTop: '12px',
@@ -1259,13 +1291,11 @@ const PositionList: React.FC = () => {
             <span>
               当前价值合计：{' '}
               <span style={{ fontWeight: 600 }}>
-                {positionFilter === 'current'
-                  ? `${formatUSDC(positionTotals.totalCurrentValue.toString())} USDC`
-                  : '-'}
+                {formatUSDC(positionTotals.totalCurrentValue.toString())} USDC
               </span>
             </span>
             <span>
-              盈亏合计：{' '}
+              浮动盈亏合计：{' '}
               <span
                 style={{
                   fontWeight: 600,
@@ -1295,32 +1325,87 @@ const PositionList: React.FC = () => {
       {(isMobile || viewMode === 'card') ? (
         <Card loading={loading}>
           {renderCardView()}
+          {/* 移动端分页 */}
           {filteredPositions.length > 0 && (
-            <div style={{ 
-              marginTop: '24px', 
-              textAlign: 'center',
-              color: '#999',
-              fontSize: '14px'
-            }}>
-              共 {filteredPositions.length} 个仓位{searchKeyword ? `（已过滤）` : ''}
-            </div>
+            <>
+              <div style={{
+                marginTop: '16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}>
+                <div style={{ fontSize: '14px', color: '#666' }}>
+                  共 {filteredPositions.length} 个仓位{searchKeyword ? `（已过滤）` : ''}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Button
+                    size="small"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                  >
+                    上一页
+                  </Button>
+                  <span style={{ lineHeight: '32px', fontSize: '14px' }}>
+                    {currentPage} / {Math.ceil(filteredPositions.length / pageSize)}
+                  </span>
+                  <Button
+                    size="small"
+                    disabled={currentPage >= Math.ceil(filteredPositions.length / pageSize)}
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                  >
+                    下一页
+                  </Button>
+                </div>
+              </div>
+              {/* 每页条数选择器 */}
+              <div style={{
+                marginTop: '8px',
+                textAlign: 'right',
+                fontSize: '14px'
+              }}>
+                <Select
+                  value={pageSize}
+                  onChange={(value) => {
+                    setPageSize(value)
+                    setCurrentPage(1)
+                  }}
+                  size="small"
+                  style={{ width: '100px' }}
+                >
+                  <Select.Option value={10}>10 条/页</Select.Option>
+                  <Select.Option value={20}>20 条/页</Select.Option>
+                  <Select.Option value={50}>50 条/页</Select.Option>
+                </Select>
+              </div>
+            </>
           )}
         </Card>
       ) : (
-      <Card>
-        <Table
-          dataSource={filteredPositions}
-          columns={columns}
-          rowKey={(record, index) => `${record.accountId}-${record.marketId}-${index}`}
-          loading={loading}
-          pagination={{
-            pageSize: 20,
-            showSizeChanger: !isMobile,
-            showTotal: (total) => `共 ${total} 个仓位${searchKeyword ? `（已过滤）` : ''}`
-          }}
-          scroll={isMobile ? { x: 1500 } : undefined}
-        />
-      </Card>
+        <Card>
+          <Table
+            dataSource={filteredPositions}
+            columns={columns}
+            rowKey={(record, index) => `${record.accountId}-${record.marketId}-${index}`}
+            loading={loading}
+            pagination={{
+              current: currentPage,
+              pageSize: pageSize,
+              total: filteredPositions.length,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50'],
+              showTotal: (total) => `共 ${total} 个仓位${searchKeyword ? `（已过滤）` : ''}`,
+              onChange: (page, size) => {
+                setCurrentPage(page)
+                if (size !== pageSize) {
+                  setPageSize(size)
+                }
+              }
+            }}
+            scroll={isMobile ? { x: 1500 } : undefined}
+          />
+        </Card>
       )}
       
       {/* 出售模态框 */}
