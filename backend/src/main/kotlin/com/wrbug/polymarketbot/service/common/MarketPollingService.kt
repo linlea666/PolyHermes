@@ -99,9 +99,6 @@ class MarketPollingService(
                 logger.debug("没有找到任何订单，跳过市场信息检查")
                 return
             }
-            
-            logger.debug("找到 ${marketIds.size} 个不同的市场ID")
-            
             // 2. 检查哪些市场信息在数据库中缺失
             val existingMarkets = marketService.marketRepository.findByMarketIdIn(marketIds)
             val existingMarketIds = existingMarkets.map { it.marketId }.toSet()
@@ -113,7 +110,6 @@ class MarketPollingService(
             }
             
             if (validMissingMarketIds.isEmpty()) {
-                logger.debug("所有市场信息都已存在，无需更新")
                 return
             }
             
