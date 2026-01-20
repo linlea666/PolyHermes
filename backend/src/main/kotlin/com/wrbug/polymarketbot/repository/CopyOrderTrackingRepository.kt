@@ -75,15 +75,11 @@ interface CopyOrderTrackingRepository : JpaRepository<CopyOrderTracking, Long> {
     fun countActivePositions(copyTradingId: Long): Int
 
     /**
-     * 检查指定市场是否存在活跃仓位
+     * 计算指定跟单配置、市场和方向下的当前持仓总价值 (成本价计算)
+     * 按市场+方向（outcomeIndex）分别统计
      */
-    fun existsByCopyTradingIdAndMarketIdAndRemainingQuantityGreaterThan(copyTradingId: Long, marketId: String, remainingQuantity: BigDecimal): Boolean
-
-    /**
-     * 计算指定跟单配置和市场下的当前持仓总价值 (成本价计算)
-     */
-    @Query("SELECT SUM(t.remainingQuantity * t.price) FROM CopyOrderTracking t WHERE t.copyTradingId = :copyTradingId AND t.marketId = :marketId AND t.remainingQuantity > 0")
-    fun sumCurrentPositionValueByMarket(copyTradingId: Long, marketId: String): BigDecimal?
+    @Query("SELECT SUM(t.remainingQuantity * t.price) FROM CopyOrderTracking t WHERE t.copyTradingId = :copyTradingId AND t.marketId = :marketId AND t.outcomeIndex = :outcomeIndex AND t.remainingQuantity > 0")
+    fun sumCurrentPositionValueByMarketAndOutcomeIndex(copyTradingId: Long, marketId: String, outcomeIndex: Int): BigDecimal?
 
     /**
      * 查询指定跟单配置下，创建时间超过指定时间点的未匹配订单（FIFO顺序）

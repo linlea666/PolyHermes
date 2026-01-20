@@ -45,7 +45,8 @@ class CopyTradingFilterService(
         copyOrderAmount: BigDecimal? = null,  // 跟单金额（USDC），用于仓位检查
         marketId: String? = null,  // 市场ID，用于仓位检查（按市场过滤仓位）
         marketTitle: String? = null,  // 市场标题，用于关键字过滤
-        marketEndDate: Long? = null  // 市场截止时间，用于市场截止时间检查
+        marketEndDate: Long? = null,  // 市场截止时间，用于市场截止时间检查
+        outcomeIndex: Int? = null  // 方向索引（0, 1, 2, ...），用于按市场+方向检查仓位
     ): FilterResult {
         // 1. 关键字过滤检查（如果配置了关键字过滤）
         if (copyTrading.keywordFilterMode != null && copyTrading.keywordFilterMode != "DISABLED") {
@@ -79,7 +80,7 @@ class CopyTradingFilterService(
         if (!needOrderbook) {
             // 仓位检查（如果配置了最大仓位限制且提供了跟单金额和市场ID）
             if (copyOrderAmount != null && marketId != null) {
-                val positionCheck = checkPositionLimits(copyTrading, copyOrderAmount, marketId)
+                val positionCheck = checkPositionLimits(copyTrading, copyOrderAmount, marketId, outcomeIndex)
                 if (!positionCheck.isPassed) {
                     return positionCheck
                 }
@@ -116,7 +117,7 @@ class CopyTradingFilterService(
         
         // 7. 仓位检查（如果配置了最大仓位限制且提供了跟单金额和市场ID）
         if (copyOrderAmount != null && marketId != null) {
-            val positionCheck = checkPositionLimits(copyTrading, copyOrderAmount, marketId)
+            val positionCheck = checkPositionLimits(copyTrading, copyOrderAmount, marketId, outcomeIndex)
             if (!positionCheck.isPassed) {
                 return positionCheck
             }
@@ -291,87 +292,104 @@ class CopyTradingFilterService(
     }
     
     /**
-     * 检查仓位限制（按市场检查）
+     * 检查仓位限制（按市场+方向检查）
      * @param copyTrading 跟单配置
      * @param copyOrderAmount 跟单金额（USDC）
      * @param marketId 市场ID，用于过滤该市场的仓位
+     * @param outcomeIndex 方向索引（0, 1, 2, ...），用于按市场+方向检查仓位
      * @return 过滤结果
      */
     private suspend fun checkPositionLimits(
         copyTrading: CopyTrading,
         copyOrderAmount: BigDecimal,
-        marketId: String
+        marketId: String,
+        outcomeIndex: Int?
     ): FilterResult {
         // 如果未配置仓位限制，直接通过
         if (copyTrading.maxPositionValue == null && copyTrading.maxPositionCount == null) {
             return FilterResult.passed()
         }
-        
+
         try {
             // 获取账户的所有仓位信息
             val positionsResult = accountService.getAllPositions()
             if (positionsResult.isFailure) {
-                logger.warn("获取仓位信息失败，跳过仓位检查: accountId=${copyTrading.accountId}, marketId=$marketId, error=${positionsResult.exceptionOrNull()?.message}")
+                logger.warn("获取仓位信息失败，跳过仓位检查: accountId=${copyTrading.accountId}, marketId=$marketId, outcomeIndex=$outcomeIndex, error=${positionsResult.exceptionOrNull()?.message}")
                 // 如果获取仓位失败，为了安全起见，不通过检查
                 return FilterResult.maxPositionValueFailed("获取仓位信息失败，无法进行仓位检查")
             }
-            
+
             val positions = positionsResult.getOrNull() ?: return FilterResult.maxPositionValueFailed("仓位信息为空")
-            
+
             // 过滤出当前账户且该市场的仓位
-            val marketPositions = positions.currentPositions.filter { 
+            val marketPositions = positions.currentPositions.filter {
                 it.accountId == copyTrading.accountId && it.marketId == marketId
             }
-            
+
             // 检查最大仓位金额（如果配置了）
-            if (copyTrading.maxPositionValue != null) {
-                // 比较数据库成本价（本地订单记录）和外部持仓市值（可能来自其他终端的操作），取最大值
-                val dbValue = copyOrderTrackingRepository.sumCurrentPositionValueByMarket(copyTrading.id!!, marketId) ?: BigDecimal.ZERO
-                val extValue = marketPositions.sumOf { it.currentValue.toSafeBigDecimal() }
+            if (copyTrading.maxPositionValue != null && outcomeIndex != null) {
+                // 按市场+方向（outcomeIndex）分别计算数据库成本价
+                val dbValue = copyOrderTrackingRepository.sumCurrentPositionValueByMarketAndOutcomeIndex(
+                    copyTrading.id!!, marketId, outcomeIndex
+                ) ?: BigDecimal.ZERO
+
+                // 外部持仓也需要按方向过滤，但由于外部持仓可能没有 outcomeIndex 信息，这里保守处理：
+                // 如果外部持仓存在，取该市场的所有外部持仓市值（与数据库取最大值）
+                val extValue = if (marketPositions.isNotEmpty()) {
+                    marketPositions.sumOf { it.currentValue.toSafeBigDecimal() }
+                } else {
+                    BigDecimal.ZERO
+                }
+
+                // 取数据库值和外部持仓值的最大值
                 val currentPositionValue = dbValue.max(extValue)
-                
-                // 检查：该市场的当前仓位 + 跟单金额 <= 最大仓位金额
+
+                // 检查：该市场该方向的当前仓位 + 跟单金额 <= 最大仓位金额
                 val totalValueAfterOrder = currentPositionValue.add(copyOrderAmount)
-                
+
                 if (totalValueAfterOrder.gt(copyTrading.maxPositionValue)) {
                     return FilterResult.maxPositionValueFailed(
-                        "超过最大仓位金额限制: 当前该市场仓位(取最大值)=${currentPositionValue} USDC (DB=${dbValue}, Ext=${extValue}), 跟单金额=${copyOrderAmount} USDC, 总计=${totalValueAfterOrder} USDC > 最大限制=${copyTrading.maxPositionValue} USDC"
+                        "超过最大仓位金额限制: 市场=$marketId, 方向=$outcomeIndex, 当前仓位(取最大值)=${currentPositionValue} USDC (DB=${dbValue}, Ext=${extValue}), 跟单金额=${copyOrderAmount} USDC, 总计=${totalValueAfterOrder} USDC > 最大限制=${copyTrading.maxPositionValue} USDC"
                     )
                 }
             }
-            
+
             // 检查最大仓位数量（如果配置了）
             if (copyTrading.maxPositionCount != null) {
                 // 使用数据库中的订单记录计算活跃仓位数量（解决延迟问题）
                 val dbCount = copyOrderTrackingRepository.countActivePositions(copyTrading.id!!)
-                
+
                 // 计算外部持仓中的唯一市场数量（防止遗漏非本项目创建的仓位）
                 val extCount = positions.currentPositions
                     .filter { it.accountId == copyTrading.accountId }
                     .map { it.marketId }
                     .distinct()
                     .size
-                
+
                 val currentPositionCount = maxOf(dbCount, extCount)
-                
-                // 检查：如果当前没有该市场的活跃仓位，且总仓位数量已达到限制，则不允许开新仓
-                // 判断当前市场是否已有活跃仓位（数据库或外部持仓）
-                val hasDbPosition = copyOrderTrackingRepository.existsByCopyTradingIdAndMarketIdAndRemainingQuantityGreaterThan(
-                    copyTrading.id, marketId, BigDecimal.ZERO
-                )
+
+                // 检查：如果当前没有该市场该方向的活跃仓位，且总仓位数量已达到限制，则不允许开新仓
+                // 判断当前市场该方向是否已有活跃仓位（数据库）
+                val hasDbPosition = if (outcomeIndex != null) {
+                    copyOrderTrackingRepository.findUnmatchedBuyOrdersByOutcomeIndex(
+                        copyTrading.id, marketId, outcomeIndex
+                    ).isNotEmpty()
+                } else {
+                    false
+                }
                 val hasExtPosition = marketPositions.isNotEmpty()
                 val hasCurrentMarketPosition = hasDbPosition || hasExtPosition
-                
+
                 if (!hasCurrentMarketPosition && currentPositionCount >= copyTrading.maxPositionCount) {
                     return FilterResult.maxPositionCountFailed(
                         "超过最大仓位数量限制: 当前活跃仓位总数(取最大值)=${currentPositionCount} (DB=${dbCount}, Ext=${extCount}) >= 最大限制=${copyTrading.maxPositionCount}"
                     )
                 }
             }
-            
+
             return FilterResult.passed()
         } catch (e: Exception) {
-            logger.error("仓位检查异常: accountId=${copyTrading.accountId}, marketId=$marketId, error=${e.message}", e)
+            logger.error("仓位检查异常: accountId=${copyTrading.accountId}, marketId=$marketId, outcomeIndex=$outcomeIndex, error=${e.message}", e)
             // 如果检查异常，为了安全起见，不通过检查
             return FilterResult.maxPositionValueFailed("仓位检查异常: ${e.message}")
         }

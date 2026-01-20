@@ -302,7 +302,7 @@ open class CopyOrderTrackingService(
 
                     // 过滤条件检查（在计算订单参数之前）
                     // 传入 Leader 交易价格，用于价格区间检查
-                    // 传入跟单金额和市场ID，用于仓位检查（按市场检查仓位）
+                    // 传入跟单金额和市场ID，用于仓位检查（按市场+方向检查仓位）
                     // 传入市场标题，用于关键字过滤
                     // 传入市场截止时间，用于市场截止时间检查
                     // 订单簿只请求一次，返回给后续逻辑使用
@@ -313,7 +313,8 @@ open class CopyOrderTrackingService(
                         copyOrderAmount = copyOrderAmount,
                         marketId = trade.market,
                         marketTitle = marketTitle,
-                        marketEndDate = marketEndDate
+                        marketEndDate = marketEndDate,
+                        outcomeIndex = trade.outcomeIndex
                     )
                     val orderbook = filterResult.orderbook  // 获取订单簿（如果需要）
                     if (!filterResult.isPassed) {
