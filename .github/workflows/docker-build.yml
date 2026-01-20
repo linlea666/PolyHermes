@@ -100,7 +100,8 @@ jobs:
       - name: Build Backend JAR
         run: |
           cd backend
-          gradle bootJar --no-daemon
+          chmod +x gradlew
+          ./gradlew bootJar --no-daemon
           echo "✅ 后端构建完成"
           ls -lh build/libs/*.jar
       
