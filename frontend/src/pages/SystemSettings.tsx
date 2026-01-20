@@ -60,14 +60,6 @@ const SystemSettings: React.FC = () => {
   const [proxyCheckResult, setProxyCheckResult] = useState<ProxyCheckResponse | null>(null)
   const [currentProxyConfig, setCurrentProxyConfig] = useState<ProxyConfig | null>(null)
 
-  // 第五部分：系统更新
-  const [updateChecking, setUpdateChecking] = useState(false)
-  const [updateInfo, setUpdateInfo] = useState<any>(null)
-  const [updateProgress, setUpdateProgress] = useState(0)
-  const [updateMessage, setUpdateMessage] = useState('')
-  const [isUpdating, setIsUpdating] = useState(false)
-  const [currentVersion, setCurrentVersion] = useState('')
-
   useEffect(() => {
     // 初始化多语言设置
     const savedLanguage = localStorage.getItem('i18n_language') || 'auto'
@@ -78,8 +70,6 @@ const SystemSettings: React.FC = () => {
     fetchNotificationConfigs()
     fetchSystemConfig()
     fetchProxyConfig()
-    fetchCurrentVersion()
-    fetchUpdateStatus()
   }, [])
 
   // ==================== 第一部分：多语言 ====================
