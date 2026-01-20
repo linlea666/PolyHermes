@@ -30,12 +30,20 @@ RUN if [ "$BUILD_IN_DOCKER" = "true" ]; then \
 
 COPY frontend/ ./
 
-# 条件：仅在 Docker 内部编译时执行构建
+# 如果使用外部产物，先从构建上下文复制外部编译的 dist
+# 注意：如果 BUILD_IN_DOCKER=true 且本地没有 dist，这个 COPY 会失败，但会在下面编译生成
+COPY frontend/dist ./dist
+
+# 条件：仅在 Docker 内部编译时执行构建（会覆盖外部产物）
 RUN if [ "$BUILD_IN_DOCKER" = "true" ]; then \
       echo "🔨 Docker 内部编译前端..."; \
       npm run build; \
     else \
-      echo "⏭️  跳过编译，使用外部产物"; \
+      echo "⏭️  使用外部产物"; \
+      if [ ! -d "dist" ] || [ -z "$(ls -A dist 2>/dev/null)" ]; then \
+        echo "❌ 错误：BUILD_IN_DOCKER=false 但找不到外部产物 frontend/dist"; \
+        exit 1; \
+      fi; \
     fi
 
 # ==================== 阶段2：构建后端 ====================
@@ -56,12 +64,21 @@ RUN if [ "$BUILD_IN_DOCKER" = "true" ]; then \
 # 复制源代码
 COPY backend/src ./src
 
-# 条件：仅在 Docker 内部编译时执行构建
+# 如果使用外部产物，先从构建上下文复制外部编译的 JAR
+# 注意：如果 BUILD_IN_DOCKER=true 且本地没有 JAR，这个 COPY 会失败，但会在下面编译生成
+COPY backend/build/libs/*.jar build/libs/
+
+# 条件：仅在 Docker 内部编译时执行构建（会覆盖外部产物）
 RUN if [ "$BUILD_IN_DOCKER" = "true" ]; then \
       echo "🔨 Docker 内部编译后端..."; \
       gradle bootJar --no-daemon; \
     else \
-      echo "⏭️  跳过编译，使用外部产物"; \
+      echo "⏭️  使用外部产物"; \
+      mkdir -p build/libs; \
+      if [ -z "$(ls -A build/libs/*.jar 2>/dev/null)" ]; then \
+        echo "❌ 错误：BUILD_IN_DOCKER=false 但找不到外部产物 backend/build/libs/*.jar"; \
+        exit 1; \
+      fi; \
     fi
 
 # ==================== 阶段3：运行环境 ====================
@@ -76,6 +93,7 @@ RUN apt-get update && \
     rm -rf /etc/nginx/sites-enabled/default
 
 # 从构建阶段复制文件
+# 当 BUILD_IN_DOCKER=false 时，构建阶段已经复制了外部产物
 COPY --from=frontend-build /app/frontend/dist /usr/share/nginx/html
 COPY --from=backend-build /app/backend/build/libs/*.jar app.jar
 
