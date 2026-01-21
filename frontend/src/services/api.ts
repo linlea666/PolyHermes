@@ -715,5 +715,8 @@ export const apiService = {
   }
 }
 
+// 导出 apiClient 供需要直接使用 axios 实例的组件使用
+export { apiClient }
+
 export default apiService
 

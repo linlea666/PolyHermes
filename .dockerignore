@@ -14,11 +14,11 @@
 .DS_Store
 
 # 构建产物
-backend/build/
+# 注意：frontend/dist 和 backend/build/libs 在使用 BUILD_IN_DOCKER=false 时是必需的
+# 所以不能忽略它们。在 BUILD_IN_DOCKER=true 时，它们会被 Docker 内部编译覆盖
 backend/.gradle/
 backend/out/
 backend/bin/
-frontend/dist/
 frontend/node_modules/
 frontend/.vite/
 frontend/.cache/
