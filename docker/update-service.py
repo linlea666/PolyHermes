@@ -331,10 +331,17 @@ def perform_update(target_version):
         # 7. 重启后端服务
         update_status['message'] = '重启后端服务...'
         logger.info("重启后端服务...")
-        subprocess.Popen([
+        
+        # 创建后端日志文件
+        backend_log_file = LOG_FILE.parent / 'backend-update.log'
+        backend_log = open(backend_log_file, 'w')
+        
+        backend_process = subprocess.Popen([
             'java', '-jar', str(BACKEND_JAR),
             '--spring.profiles.active=prod'
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ], stdout=backend_log, stderr=subprocess.STDOUT, start_new_session=True)
+        
+        logger.info(f"后端进程已启动 (PID: {backend_process.pid})")
         
         update_status['progress'] = 80
         
@@ -349,32 +356,101 @@ def perform_update(target_version):
         logger.info("等待后端服务启动...")
         
         healthy = False
-        for i in range(30):
+        max_wait_time = 90  # 增加到90秒，给后端更多启动时间
+        last_process_check = 0
+        
+        for i in range(max_wait_time):
+            # 每5秒检查一次进程状态
+            if i - last_process_check >= 5:
+                last_process_check = i
+                if backend_process.poll() is not None:
+                    # 进程已退出
+                    backend_log.close()
+                    error_msg = ''
+                    try:
+                        with open(backend_log_file, 'r') as f:
+                            lines = f.readlines()
+                            error_msg = ''.join(lines[-50:])  # 读取最后50行
+                    except:
+                        pass
+                    
+                    logger.error(f"后端进程异常退出（等待了 {i} 秒），退出码: {backend_process.returncode}")
+                    if error_msg:
+                        logger.error(f"后端日志最后50行:\n{error_msg}")
+                    raise Exception(f"后端服务启动失败，退出码: {backend_process.returncode}")
+                else:
+                    logger.debug(f"后端进程仍在运行 (PID: {backend_process.pid})")
+            
+            # 尝试健康检查
             try:
                 response = requests.get(f'{BACKEND_URL}/api/system/health', timeout=2)
                 if response.status_code == 200:
                     healthy = True
+                    backend_log.close()
+                    logger.info(f"健康检查通过（等待了 {i+1} 秒）")
                     break
-            except:
-                pass
+            except requests.exceptions.ConnectionError:
+                # 连接被拒绝，说明后端还没启动或端口未监听
+                if i % 10 == 0 and i > 0:  # 每10秒记录一次
+                    logger.debug(f"健康检查尝试 {i+1}/{max_wait_time}: 连接被拒绝（后端可能还在启动中）")
+            except requests.exceptions.Timeout:
+                # 超时
+                if i % 10 == 0:  # 每10秒记录一次
+                    logger.debug(f"健康检查尝试 {i+1}/{max_wait_time}: 请求超时")
+            except Exception as e:
+                logger.warning(f"健康检查异常: {e}")
+            
             time.sleep(1)
         
         if not healthy:
+            # 关闭日志文件并尝试读取错误信息
+            backend_log.close()
+            error_msg = ''
+            try:
+                with open(backend_log_file, 'r') as f:
+                    lines = f.readlines()
+                    error_msg = ''.join(lines[-100:])  # 读取最后100行
+            except:
+                pass
+            
+            # 检查进程状态
+            process_status = backend_process.poll()
+            if process_status is None:
+                # 进程还在运行，但健康检查失败
+                logger.error(f"健康检查失败：后端进程仍在运行 (PID: {backend_process.pid})，但无法访问健康检查端点")
+                logger.error("可能的原因：端口未监听、健康检查端点异常、或启动时间过长")
+            else:
+                # 进程已退出
+                logger.error(f"健康检查失败：后端进程已退出，退出码: {process_status}")
+            
+            if error_msg:
+                logger.error(f"后端启动日志（最后100行）:\n{error_msg}")
+            
             logger.error("健康检查失败，开始回滚...")
             update_status['message'] = '健康检查失败，回滚中...'
+            
+            # 确保后端进程已停止
+            try:
+                backend_process.terminate()
+                backend_process.wait(timeout=5)
+            except:
+                subprocess.run(['pkill', '-9', '-f', 'java.*app.jar'], check=False)
+            
             restore_backup(backup_dir)
             
-            # 重启后端
-            subprocess.run(['pkill', '-f', 'java -jar'], check=False)
-            time.sleep(1)
+            # 等待一下再重启
+            time.sleep(2)
+            
+            # 重启后端（使用旧版本）
+            logger.info("重启旧版本后端服务...")
             subprocess.Popen([
                 'java', '-jar', str(BACKEND_JAR),
                 '--spring.profiles.active=prod'
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
             
             subprocess.run(['nginx', '-s', 'reload'], check=True)
             
-            raise Exception("健康检查失败，已回滚到旧版本")
+            raise Exception(f"健康检查失败（等待了 {max_wait_time} 秒），已回滚到旧版本。请查看日志文件 {backend_log_file} 了解详情")
         
         update_status['progress'] = 100
         update_status['message'] = f'更新成功：{tag}'
