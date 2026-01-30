@@ -8,7 +8,7 @@ import { getPositionKey } from '../types'
 import { useMediaQuery } from 'react-responsive'
 import { useWebSocketSubscription } from '../hooks/useWebSocket'
 import { wsManager } from '../services/websocket'
-import { formatUSDC } from '../utils'
+import { formatUSDC, formatNumber as formatNumberUtil } from '../utils'
 
 type PositionFilter = 'current' | 'historical'
 type ViewMode = 'card' | 'list'
@@ -42,26 +42,26 @@ const PositionList: React.FC = () => {
   const [redeeming, setRedeeming] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
-  
+
   useEffect(() => {
     fetchAccounts()
     // 完全依赖 WebSocket 推送，不主动请求接口
     // 连接建立后会立即收到全量数据推送
     setLoading(true)  // 显示加载状态，等待 WebSocket 全量推送
-    
+
     // 监听连接状态（WebSocket 连接在 App.tsx 中全局初始化，全局共享）
     const removeListener = wsManager.onConnectionChange((connected) => {
       setWsConnected(connected)
     })
-    
+
     // 获取当前连接状态
     setWsConnected(wsManager.isConnected())
-    
+
     return () => {
       removeListener()
     }
   }, [])
-  
+
   // 当仓位数据变化时，更新可赎回统计
   useEffect(() => {
     if (currentPositions.length > 0) {
@@ -73,7 +73,7 @@ const PositionList: React.FC = () => {
   useEffect(() => {
     setCurrentPage(1)
   }, [positionFilter, selectedAccountId, searchKeyword])
-  
+
   // 获取可赎回仓位统计
   const fetchRedeemableSummary = async () => {
     setLoadingRedeemableSummary(true)
@@ -88,20 +88,20 @@ const PositionList: React.FC = () => {
       setLoadingRedeemableSummary(false)
     }
   }
-  
+
   // 处理赎回按钮点击
   const handleRedeemClick = async () => {
     await fetchRedeemableSummary()
     setRedeemModalVisible(true)
   }
-  
+
   // 提交赎回
   const handleRedeemSubmit = async () => {
     if (!redeemableSummary || redeemableSummary.positions.length === 0) {
       message.warning('没有可赎回的仓位')
       return
     }
-    
+
     setRedeeming(true)
     try {
       const request: PositionRedeemRequest = {
@@ -112,7 +112,7 @@ const PositionList: React.FC = () => {
           side: pos.side
         }))
       }
-      
+
       const response = await apiService.accounts.redeemPositions(request)
       if (response.data.code === 0 && response.data.data) {
         const transactions = response.data.data.transactions || []
@@ -154,7 +154,7 @@ const PositionList: React.FC = () => {
       setRedeeming(false)
     }
   }
-  
+
   // 订阅仓位推送
   const { connected: positionConnected } = useWebSocketSubscription<PositionPushMessage>(
     'position',
@@ -162,12 +162,12 @@ const PositionList: React.FC = () => {
       handlePositionPushMessage(message)
     }
   )
-  
+
   // 更新连接状态（使用订阅的连接状态）
   useEffect(() => {
     setWsConnected(positionConnected)
   }, [positionConnected])
-  
+
   /**
    * 处理仓位推送消息
    */
@@ -192,7 +192,7 @@ const PositionList: React.FC = () => {
       })
     }
   }
-  
+
   /**
    * 合并仓位数据
    * 新增的仓位插入到列表顶部，更新的仓位更新现有数据并保持位置，删除的仓位从列表中移除
@@ -204,11 +204,11 @@ const PositionList: React.FC = () => {
   ): AccountPosition[] => {
     // 创建现有仓位的键集合，用于快速判断是新增还是更新
     const existingKeys = new Set(prev.map(pos => getPositionKey(pos)))
-    
+
     // 区分新增和更新的仓位
     const newPositions: AccountPosition[] = []
     const updateMap = new Map<string, AccountPosition>()
-    
+
     updates.forEach(update => {
       const key = getPositionKey(update)
       if (existingKeys.has(key)) {
@@ -219,22 +219,22 @@ const PositionList: React.FC = () => {
         newPositions.push(update)
       }
     })
-    
+
     // 构建结果数组
     const result: AccountPosition[] = []
-    
+
     // 1. 先添加新增的仓位（在顶部）
     result.push(...newPositions)
-    
+
     // 2. 遍历原有仓位，应用更新或保持不变
     prev.forEach(pos => {
       const key = getPositionKey(pos)
-      
+
       // 如果被删除，跳过
       if (removedKeys.includes(key)) {
         return
       }
-      
+
       // 如果有更新，使用新数据；否则保持原数据
       if (updateMap.has(key)) {
         result.push(updateMap.get(key)!)
@@ -242,10 +242,10 @@ const PositionList: React.FC = () => {
         result.push(pos)
       }
     })
-    
+
     return result
   }
-  
+
   const fetchAccounts = async () => {
     setAccountsLoading(true)
     try {
@@ -261,14 +261,14 @@ const PositionList: React.FC = () => {
       setAccountsLoading(false)
     }
   }
-  
+
   // 已移除 fetchPositions 函数，完全依赖 WebSocket 推送更新数据
-  
+
   // 根据筛选器选择对应的仓位列表
   const basePositions = useMemo(() => {
     return positionFilter === 'current' ? currentPositions : historyPositions
   }, [positionFilter, currentPositions, historyPositions])
-  
+
   // 本地搜索和筛选过滤
   const filteredPositions = useMemo(() => {
     let filtered = basePositions
@@ -319,18 +319,18 @@ const PositionList: React.FC = () => {
     const endIndex = startIndex + pageSize
     return filteredPositions.slice(startIndex, endIndex)
   }, [filteredPositions, currentPage, pageSize])
-  
+
   const getSideColor = (side: string) => {
     return side === 'YES' ? 'green' : 'red'
   }
-  
+
   const formatNumber = (value: string | undefined, decimals: number = 2) => {
     if (!value) return '-'
     const num = parseFloat(value)
     if (isNaN(num)) return value
-    return num.toFixed(decimals)
+    return formatNumberUtil(value, decimals)
   }
-  
+
   const formatPercent = (value: string | undefined) => {
     if (!value) return '-'
     const num = parseFloat(value)
@@ -422,10 +422,10 @@ const PositionList: React.FC = () => {
     setLimitPrice('')
     setSelectedPercent(null)  // 重置百分比选择
     form.resetFields()
-    
+
     // 加载市场价格
     try {
-      const response = await apiService.markets.getMarketPrice({ 
+      const response = await apiService.markets.getMarketPrice({
         marketId: position.marketId,
         outcomeIndex: position.outcomeIndex  // 传递结果索引，用于确定需要查询哪个 outcome 的价格
       })
@@ -462,21 +462,21 @@ const PositionList: React.FC = () => {
   // 计算平仓收益
   const calculatePnl = (quantity: string, price: string) => {
     if (!selectedPosition || !quantity || !price) return { pnl: 0, percentPnl: 0 }
-    
+
     const avgPrice = parseFloat(selectedPosition.avgPrice || '0')
     const sellPrice = parseFloat(price || '0')
     const qty = parseFloat(quantity || '0')
-    
+
     // 验证数据有效性
     if (isNaN(avgPrice) || isNaN(sellPrice) || isNaN(qty) || avgPrice <= 0 || sellPrice <= 0 || qty <= 0) {
       return { pnl: 0, percentPnl: 0 }
     }
-    
+
     // 计算收益：收益金额 = (卖出价格 - 平均买入价格) × 卖出数量
     const pnl = (sellPrice - avgPrice) * qty
     // 计算收益率：收益率 = (卖出价格 - 平均买入价格) / 平均买入价格 × 100%
     const percentPnl = ((sellPrice - avgPrice) / avgPrice) * 100
-    
+
     return { pnl, percentPnl }
   }
 
@@ -492,12 +492,12 @@ const PositionList: React.FC = () => {
   // 提交卖出订单
   const handleSellSubmit = async () => {
     if (!selectedPosition || submitting) return
-    
+
     try {
       await form.validateFields()
-      
+
       setSubmitting(true)
-      
+
       const request: PositionSellRequest = {
         accountId: selectedPosition.accountId,
         marketId: selectedPosition.marketId,
@@ -506,15 +506,15 @@ const PositionList: React.FC = () => {
         orderType: orderType,
         // 如果选择了百分比，只传递百分比，不传 quantity
         // 如果手动输入，只传递 quantity，不传 percent
-        ...(selectedPercent != null 
-          ? { percent: selectedPercent } 
+        ...(selectedPercent != null
+          ? { percent: selectedPercent }
           : { quantity: sellQuantity }
         ),
         price: orderType === 'LIMIT' ? limitPrice : undefined
       }
-      
+
       const response = await apiService.accounts.sellPosition(request)
-      
+
       if (response.data.code === 0) {
         message.success('卖出订单创建成功')
         setSellModalVisible(false)
@@ -563,21 +563,21 @@ const PositionList: React.FC = () => {
           const pnlNum = parseFloat(position.pnl || '0')
           const isProfit = pnlNum >= 0
           // 只有当前仓位才根据盈亏显示边框颜色
-          const borderColor = positionFilter === 'current' 
+          const borderColor = positionFilter === 'current'
             ? (isProfit ? 'rgba(82, 196, 26, 0.2)' : 'rgba(245, 34, 45, 0.2)')
             : 'rgba(0,0,0,0.06)'
-          
+
           const cardKey = `${position.accountId}-${position.marketId}-${index}`
           const isExpanded = expandedCards.has(cardKey)
           // 移动端需要折叠功能，桌面端始终展开
           const shouldCollapse = isMobile && !isExpanded
-          
+
           return (
-            <Col 
+            <Col
               key={cardKey}
-              xs={24} 
-              sm={12} 
-              lg={8} 
+              xs={24}
+              sm={12}
+              lg={8}
               xl={6}
             >
               <Card
@@ -597,12 +597,12 @@ const PositionList: React.FC = () => {
                 <div style={{ marginBottom: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
                     {position.marketIcon && (
-                      <img 
-                        src={position.marketIcon} 
+                      <img
+                        src={position.marketIcon}
                         alt={position.marketTitle || 'Market'}
-                        style={{ 
-                          width: '48px', 
-                          height: '48px', 
+                        style={{
+                          width: '48px',
+                          height: '48px',
                           borderRadius: '8px',
                           objectFit: 'cover',
                           flexShrink: 0
@@ -615,14 +615,14 @@ const PositionList: React.FC = () => {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {position.marketTitle ? (
                         (position.eventSlug || position.marketSlug) ? (
-                          <a 
+                          <a
                             href={`https://polymarket.com/event/${position.eventSlug || position.marketSlug}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            style={{ 
-                              fontWeight: 'bold', 
-                              color: '#1890ff', 
+                            style={{
+                              fontWeight: 'bold',
+                              color: '#1890ff',
                               textDecoration: 'none',
                               fontSize: '15px',
                               lineHeight: '1.4',
@@ -677,8 +677,8 @@ const PositionList: React.FC = () => {
                   {shouldCollapse && positionFilter === 'current' && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <span style={{ fontSize: '13px', color: '#666' }}>盈亏</span>
-                      <span style={{ 
-                        fontSize: '13px', 
+                      <span style={{
+                        fontSize: '13px',
                         fontWeight: '500',
                         color: isProfit ? '#52c41a' : '#f5222d'
                       }}>
@@ -686,7 +686,7 @@ const PositionList: React.FC = () => {
                       </span>
                     </div>
                   )}
-                  
+
                   {/* 展开时显示所有数据 */}
                   {!shouldCollapse && (
                     <>
@@ -726,12 +726,12 @@ const PositionList: React.FC = () => {
                       )}
                     </>
                   )}
-                  
+
                   {/* 移动端展开/折叠指示器 */}
                   {isMobile && (
-                    <div style={{ 
-                      display: 'flex', 
-                      justifyContent: 'center', 
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'center',
                       alignItems: 'center',
                       marginTop: '8px',
                       paddingTop: '8px',
@@ -748,7 +748,7 @@ const PositionList: React.FC = () => {
 
                 {/* 盈亏信息 - 突出显示（仅当前仓位显示，仅展开时显示） */}
                 {positionFilter === 'current' && !shouldCollapse && (
-                  <div style={{ 
+                  <div style={{
                     marginBottom: '12px',
                     padding: '12px',
                     borderRadius: '8px',
@@ -757,8 +757,8 @@ const PositionList: React.FC = () => {
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                       <span style={{ fontSize: '13px', color: '#666' }}>盈亏</span>
-                      <span style={{ 
-                        fontSize: '16px', 
+                      <span style={{
+                        fontSize: '16px',
                         fontWeight: 'bold',
                         color: isProfit ? '#52c41a' : '#f5222d'
                       }}>
@@ -766,7 +766,7 @@ const PositionList: React.FC = () => {
                       </span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <span style={{ 
+                      <span style={{
                         fontSize: '14px',
                         color: isProfit ? '#52c41a' : '#f5222d',
                         fontWeight: '500'
@@ -775,16 +775,16 @@ const PositionList: React.FC = () => {
                       </span>
                     </div>
                     {position.realizedPnl && (
-                      <div style={{ 
-                        marginTop: '8px', 
-                        paddingTop: '8px', 
+                      <div style={{
+                        marginTop: '8px',
+                        paddingTop: '8px',
                         borderTop: '1px solid rgba(0,0,0,0.06)',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center'
                       }}>
                         <span style={{ fontSize: '12px', color: '#999' }}>已实现盈亏</span>
-                        <span style={{ 
+                        <span style={{
                           fontSize: '13px',
                           color: parseFloat(position.realizedPnl) >= 0 ? '#52c41a' : '#f5222d',
                           fontWeight: '500'
@@ -800,9 +800,9 @@ const PositionList: React.FC = () => {
                 {positionFilter === 'current' && !shouldCollapse && (
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
                     {!position.redeemable && (
-                      <Button 
-                        type="primary" 
-                        danger 
+                      <Button
+                        type="primary"
+                        danger
                         size="small"
                         block={isMobile}
                         onClick={() => handleSellClick(position)}
@@ -819,138 +819,138 @@ const PositionList: React.FC = () => {
       </Row>
     )
   }
-  
+
   // 根据仓位类型动态生成列（历史仓位不显示当前价格、当前价值、状态列）
   const columns = useMemo(() => {
     const baseColumns: any[] = [
-    {
-      title: '',
-      key: 'icon',
-      width: 50,
-      render: (_: any, record: AccountPosition) => {
-        if (!record.marketIcon) return null
-        return (
-          <img 
-            src={record.marketIcon} 
-            alt={record.marketTitle || 'Market'}
-            style={{ 
-              width: '32px', 
-              height: '32px', 
-              borderRadius: '4px',
-              objectFit: 'cover'
-            }}
-            onError={(e) => {
-              // 图片加载失败时隐藏
-              e.currentTarget.style.display = 'none'
-            }}
-          />
-        )
+      {
+        title: '',
+        key: 'icon',
+        width: 50,
+        render: (_: any, record: AccountPosition) => {
+          if (!record.marketIcon) return null
+          return (
+            <img
+              src={record.marketIcon}
+              alt={record.marketTitle || 'Market'}
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '4px',
+                objectFit: 'cover'
+              }}
+              onError={(e) => {
+                // 图片加载失败时隐藏
+                e.currentTarget.style.display = 'none'
+              }}
+            />
+          )
+        },
+        fixed: isMobile ? ('left' as const) : undefined
       },
-      fixed: isMobile ? ('left' as const) : undefined
-    },
-    {
-      title: '账户',
-      dataIndex: 'accountName',
-      key: 'accountName',
-      render: (text: string | undefined, record: AccountPosition) => (
-        <div>
-          <div style={{ fontWeight: 'bold' }}>
-            {text || `账户 ${record.accountId}`}
-          </div>
-          <div style={{ fontSize: '12px', color: '#999', fontFamily: 'monospace' }}>
-            {record.walletAddress.slice(0, 6)}...{record.walletAddress.slice(-6)}
-          </div>
-        </div>
-      ),
-      fixed: isMobile ? ('left' as const) : undefined,
-      width: isMobile ? 150 : 200
-    },
-    {
-      title: '市场',
-      dataIndex: 'marketTitle',
-      key: 'marketTitle',
-      render: (text: string | undefined, record: AccountPosition) => {
-        const url = record.eventSlug || record.marketSlug
-          ? `https://polymarket.com/event/${record.eventSlug || record.marketSlug}`
-          : null
-        
-        const handleTitleClick = (e: React.MouseEvent) => {
-          e.stopPropagation()
-          if (url) {
-            window.open(url, '_blank', 'noopener,noreferrer')
-          }
-        }
-        
-        return (
+      {
+        title: '账户',
+        dataIndex: 'accountName',
+        key: 'accountName',
+        render: (text: string | undefined, record: AccountPosition) => (
           <div>
-            {text ? (
-              <div>
-                {url ? (
-                  <a 
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={handleTitleClick}
-                    style={{ fontWeight: 'bold', color: '#1890ff', textDecoration: 'none', cursor: 'pointer' }}
-                  >
-                    {text}
-                  </a>
-                ) : (
-                  <div style={{ fontWeight: 'bold' }}>{text}</div>
-                )}
-              </div>
-            ) : (
-              <div style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-                {record.marketId.slice(0, 10)}...
-              </div>
-            )}
-            {record.marketSlug && (
-              <div style={{ fontSize: '12px', color: '#999' }}>{record.marketSlug}</div>
-            )}
+            <div style={{ fontWeight: 'bold' }}>
+              {text || `账户 ${record.accountId}`}
+            </div>
+            <div style={{ fontSize: '12px', color: '#999', fontFamily: 'monospace' }}>
+              {record.walletAddress.slice(0, 6)}...{record.walletAddress.slice(-6)}
+            </div>
           </div>
-        )
+        ),
+        fixed: isMobile ? ('left' as const) : undefined,
+        width: isMobile ? 150 : 200
       },
-      width: isMobile ? 200 : 250
-    },
-    {
-      title: '方向',
-      dataIndex: 'side',
-      key: 'side',
-      render: (side: string) => (
-        <Tag color={getSideColor(side)}>{side}</Tag>
-      ),
-      width: 80
-    },
-    {
-      title: '数量',
-      dataIndex: 'quantity',
-      key: 'quantity',
-      render: (quantity: string) => formatNumber(quantity, 4),
-      align: 'right' as const,
-      width: 100
-    },
-    {
-      title: '平均价格',
-      dataIndex: 'avgPrice',
-      key: 'avgPrice',
-      render: (price: string) => formatNumber(price, 4),
-      align: 'right' as const,
-      width: 120
-    },
-    {
-      title: '开仓价值',
-      dataIndex: 'initialValue',
-      key: 'initialValue',
-      render: (value: string) => (
-        <span>
-          {formatUSDC(value)} USDC
-        </span>
-      ),
-      align: 'right' as const,
-      width: 120
-    },
+      {
+        title: '市场',
+        dataIndex: 'marketTitle',
+        key: 'marketTitle',
+        render: (text: string | undefined, record: AccountPosition) => {
+          const url = record.eventSlug || record.marketSlug
+            ? `https://polymarket.com/event/${record.eventSlug || record.marketSlug}`
+            : null
+
+          const handleTitleClick = (e: React.MouseEvent) => {
+            e.stopPropagation()
+            if (url) {
+              window.open(url, '_blank', 'noopener,noreferrer')
+            }
+          }
+
+          return (
+            <div>
+              {text ? (
+                <div>
+                  {url ? (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={handleTitleClick}
+                      style={{ fontWeight: 'bold', color: '#1890ff', textDecoration: 'none', cursor: 'pointer' }}
+                    >
+                      {text}
+                    </a>
+                  ) : (
+                    <div style={{ fontWeight: 'bold' }}>{text}</div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+                  {record.marketId.slice(0, 10)}...
+                </div>
+              )}
+              {record.marketSlug && (
+                <div style={{ fontSize: '12px', color: '#999' }}>{record.marketSlug}</div>
+              )}
+            </div>
+          )
+        },
+        width: isMobile ? 200 : 250
+      },
+      {
+        title: '方向',
+        dataIndex: 'side',
+        key: 'side',
+        render: (side: string) => (
+          <Tag color={getSideColor(side)}>{side}</Tag>
+        ),
+        width: 80
+      },
+      {
+        title: '数量',
+        dataIndex: 'quantity',
+        key: 'quantity',
+        render: (quantity: string) => formatNumber(quantity, 4),
+        align: 'right' as const,
+        width: 100
+      },
+      {
+        title: '平均价格',
+        dataIndex: 'avgPrice',
+        key: 'avgPrice',
+        render: (price: string) => formatNumber(price, 4),
+        align: 'right' as const,
+        width: 120
+      },
+      {
+        title: '开仓价值',
+        dataIndex: 'initialValue',
+        key: 'initialValue',
+        render: (value: string) => (
+          <span>
+            {formatUSDC(value)} USDC
+          </span>
+        ),
+        align: 'right' as const,
+        width: 120
+      },
     ]
-    
+
     // 只有当前仓位才显示当前价格和当前价值列
     if (positionFilter === 'current') {
       baseColumns.push(
@@ -982,75 +982,75 @@ const PositionList: React.FC = () => {
         }
       )
     }
-    
+
     // 只有当前仓位才显示盈亏和已实现盈亏列
     if (positionFilter === 'current') {
-    baseColumns.push(
-      {
-        title: '盈亏',
-        dataIndex: 'pnl',
-        key: 'pnl',
-        render: (pnl: string, record: AccountPosition) => {
-          const pnlNum = parseFloat(pnl || '0')
-          const percentPnl = parseFloat(record.percentPnl || '0')
-          return (
-            <div>
-              <div style={{ 
-                color: pnlNum >= 0 ? '#3f8600' : '#cf1322',
-                fontWeight: 'bold'
-              }}>
-                {pnlNum >= 0 ? '+' : ''}{formatUSDC(pnl)} USDC
-              </div>
-              <div style={{ 
-                fontSize: '12px',
-                color: percentPnl >= 0 ? '#3f8600' : '#cf1322'
-              }}>
-                {formatPercent(record.percentPnl)}
-              </div>
-            </div>
-          )
-        },
-        align: 'right' as const,
-        width: 150,
-        sorter: (a: AccountPosition, b: AccountPosition) => {
-          const pnlA = parseFloat(a.pnl || '0')
-          const pnlB = parseFloat(b.pnl || '0')
-          return pnlA - pnlB
-        }
-      },
-      {
-        title: '已实现盈亏',
-        dataIndex: 'realizedPnl',
-        key: 'realizedPnl',
-        render: (realizedPnl: string | undefined, record: AccountPosition) => {
-          if (!realizedPnl) return '-'
-          const pnlNum = parseFloat(realizedPnl)
-          const percentPnl = parseFloat(record.percentRealizedPnl || '0')
-          return (
-            <div>
-              <div style={{ 
-                color: pnlNum >= 0 ? '#3f8600' : '#cf1322',
-                fontWeight: 'bold'
-              }}>
-                {pnlNum >= 0 ? '+' : ''}{formatUSDC(realizedPnl)} USDC
-              </div>
-              {record.percentRealizedPnl && (
-                <div style={{ 
+      baseColumns.push(
+        {
+          title: '盈亏',
+          dataIndex: 'pnl',
+          key: 'pnl',
+          render: (pnl: string, record: AccountPosition) => {
+            const pnlNum = parseFloat(pnl || '0')
+            const percentPnl = parseFloat(record.percentPnl || '0')
+            return (
+              <div>
+                <div style={{
+                  color: pnlNum >= 0 ? '#3f8600' : '#cf1322',
+                  fontWeight: 'bold'
+                }}>
+                  {pnlNum >= 0 ? '+' : ''}{formatUSDC(pnl)} USDC
+                </div>
+                <div style={{
                   fontSize: '12px',
                   color: percentPnl >= 0 ? '#3f8600' : '#cf1322'
                 }}>
-                  {formatPercent(record.percentRealizedPnl)}
+                  {formatPercent(record.percentPnl)}
                 </div>
-              )}
-            </div>
-          )
+              </div>
+            )
+          },
+          align: 'right' as const,
+          width: 150,
+          sorter: (a: AccountPosition, b: AccountPosition) => {
+            const pnlA = parseFloat(a.pnl || '0')
+            const pnlB = parseFloat(b.pnl || '0')
+            return pnlA - pnlB
+          }
         },
-        align: 'right' as const,
-        width: 150
-      }
-    )
+        {
+          title: '已实现盈亏',
+          dataIndex: 'realizedPnl',
+          key: 'realizedPnl',
+          render: (realizedPnl: string | undefined, record: AccountPosition) => {
+            if (!realizedPnl) return '-'
+            const pnlNum = parseFloat(realizedPnl)
+            const percentPnl = parseFloat(record.percentRealizedPnl || '0')
+            return (
+              <div>
+                <div style={{
+                  color: pnlNum >= 0 ? '#3f8600' : '#cf1322',
+                  fontWeight: 'bold'
+                }}>
+                  {pnlNum >= 0 ? '+' : ''}{formatUSDC(realizedPnl)} USDC
+                </div>
+                {record.percentRealizedPnl && (
+                  <div style={{
+                    fontSize: '12px',
+                    color: percentPnl >= 0 ? '#3f8600' : '#cf1322'
+                  }}>
+                    {formatPercent(record.percentRealizedPnl)}
+                  </div>
+                )}
+              </div>
+            )
+          },
+          align: 'right' as const,
+          width: 150
+        }
+      )
     }
-    
+
     // 只有当前仓位才显示操作列
     if (positionFilter === 'current') {
       baseColumns.push({
@@ -1059,9 +1059,9 @@ const PositionList: React.FC = () => {
         render: (_: any, record: AccountPosition) => (
           <Space size="small">
             {!record.redeemable && (
-              <Button 
-                type="primary" 
-                danger 
+              <Button
+                type="primary"
+                danger
                 size="small"
                 onClick={() => handleSellClick(record)}
               >
@@ -1074,42 +1074,42 @@ const PositionList: React.FC = () => {
         fixed: isMobile ? ('right' as const) : undefined
       })
     }
-    
+
     return baseColumns
   }, [positionFilter, isMobile])
-  
+
   // 统计当前和历史仓位数量（根据账户筛选）
   const filteredCurrentPositions = useMemo(() => {
     if (selectedAccountId === undefined) return currentPositions
     return currentPositions.filter(p => p.accountId === selectedAccountId)
   }, [currentPositions, selectedAccountId])
-  
+
   const filteredHistoryPositions = useMemo(() => {
     if (selectedAccountId === undefined) return historyPositions
     return historyPositions.filter(p => p.accountId === selectedAccountId)
   }, [historyPositions, selectedAccountId])
-  
+
   const currentCount = filteredCurrentPositions.length
   const historicalCount = filteredHistoryPositions.length
-      
+
   return (
     <div>
       <div style={{ marginBottom: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <h2 style={{ margin: 0 }}>仓位管理</h2>
+            <h2 style={{ margin: 0 }}>仓位管理</h2>
             {/* WebSocket 连接状态指示器 */}
-            <Tag 
-              color={wsConnected ? 'green' : 'orange'} 
+            <Tag
+              color={wsConnected ? 'green' : 'orange'}
               style={{ margin: 0 }}
             >
-              <span style={{ 
-                display: 'inline-block', 
-                width: '8px', 
-                height: '8px', 
-                borderRadius: '50%', 
-                backgroundColor: wsConnected ? '#52c41a' : '#fa8c16', 
-                marginRight: '6px', 
+              <span style={{
+                display: 'inline-block',
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: wsConnected ? '#52c41a' : '#fa8c16',
+                marginRight: '6px',
                 animation: wsConnected ? 'pulse 2s infinite' : 'pulse 1s infinite'
               }}></span>
               {wsConnected ? '实时更新' : '连接中...'}
@@ -1126,13 +1126,13 @@ const PositionList: React.FC = () => {
             />
             {!isMobile && (
               <Button.Group>
-                <Button 
+                <Button
                   type={viewMode === 'list' ? 'primary' : 'default'}
                   icon={<UnorderedListOutlined />}
                   onClick={() => setViewMode('list')}
                   title="列表视图"
                 />
-                <Button 
+                <Button
                   type={viewMode === 'card' ? 'primary' : 'default'}
                   icon={<AppstoreOutlined />}
                   onClick={() => setViewMode('card')}
@@ -1142,7 +1142,7 @@ const PositionList: React.FC = () => {
             )}
             <span style={{ color: '#999', fontSize: '14px', whiteSpace: 'nowrap' }}>
               {searchKeyword || selectedAccountId !== undefined
-                ? `找到 ${filteredPositions.length} / ${basePositions.length} 个仓位` 
+                ? `找到 ${filteredPositions.length} / ${basePositions.length} 个仓位`
                 : `共 ${basePositions.length} 个仓位`}
             </span>
           </div>
@@ -1163,9 +1163,9 @@ const PositionList: React.FC = () => {
                   return nameA.localeCompare(nameB, 'zh-CN')
                 })
                 .map(account => ({
-                value: account.id,
-                label: account.accountName || `账户 ${account.id}`
-              }))
+                  value: account.id,
+                  label: account.accountName || `账户 ${account.id}`
+                }))
             ]}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -1176,13 +1176,13 @@ const PositionList: React.FC = () => {
               display: 'inline-flex',
               gap: '4px'
             }}>
-            <Radio.Group 
-              value={positionFilter} 
-              onChange={(e) => setPositionFilter(e.target.value)}
-              size={isMobile ? 'small' : 'middle'}
+              <Radio.Group
+                value={positionFilter}
+                onChange={(e) => setPositionFilter(e.target.value)}
+                size={isMobile ? 'small' : 'middle'}
                 style={{ display: 'flex', gap: '4px' }}
               >
-                <Radio.Button 
+                <Radio.Button
                   value="current"
                   style={{
                     border: 'none',
@@ -1199,9 +1199,9 @@ const PositionList: React.FC = () => {
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span>当前仓位</span>
-                    <Tag 
-                      color={positionFilter === 'current' ? 'default' : 'blue'} 
-                      style={{ 
+                    <Tag
+                      color={positionFilter === 'current' ? 'default' : 'blue'}
+                      style={{
                         margin: 0,
                         borderRadius: '10px',
                         fontSize: '12px',
@@ -1215,8 +1215,8 @@ const PositionList: React.FC = () => {
                       {currentCount}
                     </Tag>
                   </span>
-              </Radio.Button>
-                <Radio.Button 
+                </Radio.Button>
+                <Radio.Button
                   value="historical"
                   style={{
                     border: 'none',
@@ -1233,9 +1233,9 @@ const PositionList: React.FC = () => {
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span>历史仓位</span>
-                    <Tag 
-                      color={positionFilter === 'historical' ? 'default' : 'default'} 
-                      style={{ 
+                    <Tag
+                      color={positionFilter === 'historical' ? 'default' : 'default'}
+                      style={{
                         margin: 0,
                         borderRadius: '10px',
                         fontSize: '12px',
@@ -1249,8 +1249,8 @@ const PositionList: React.FC = () => {
                       {historicalCount}
                     </Tag>
                   </span>
-              </Radio.Button>
-            </Radio.Group>
+                </Radio.Button>
+              </Radio.Group>
             </div>
             {redeemableSummary && redeemableSummary.totalCount > 0 && (
               <Button
@@ -1321,7 +1321,7 @@ const PositionList: React.FC = () => {
           </div>
         )}
       </div>
-      
+
       {(isMobile || viewMode === 'card') ? (
         <Card loading={loading}>
           {renderCardView()}
@@ -1407,7 +1407,7 @@ const PositionList: React.FC = () => {
           />
         </Card>
       )}
-      
+
       {/* 出售模态框 */}
       <Modal
         title={`出售仓位 - ${selectedPosition?.marketTitle || selectedPosition?.marketId || ''}`}
@@ -1451,15 +1451,15 @@ const PositionList: React.FC = () => {
                 </div>
               )}
             </div>
-            
+
             <Form.Item label="订单类型" required>
-              <Radio.Group 
-                value={orderType} 
+              <Radio.Group
+                value={orderType}
                 onChange={(e) => {
                   setOrderType(e.target.value)
                   // 切换订单类型时重新计算收益
                   if (sellQuantity) {
-                    const price = e.target.value === 'MARKET' 
+                    const price = e.target.value === 'MARKET'
                       ? (marketPrice?.currentPrice || selectedPosition?.currentPrice || '0')
                       : limitPrice || '0'
                     calculatePnl(sellQuantity, price)
@@ -1470,13 +1470,13 @@ const PositionList: React.FC = () => {
                 <Radio value="LIMIT">限价出售</Radio>
               </Radio.Group>
             </Form.Item>
-            
-            <Form.Item 
-              label="卖出数量" 
+
+            <Form.Item
+              label="卖出数量"
               name="quantity"
               rules={[
                 { required: true, message: '请输入卖出数量' },
-                { 
+                {
                   validator: (_, value) => {
                     if (!value || parseFloat(value) <= 0) {
                       return Promise.reject('卖出数量必须大于0')
@@ -1512,14 +1512,14 @@ const PositionList: React.FC = () => {
                 }
               />
             </Form.Item>
-            
+
             {orderType === 'LIMIT' && (
-              <Form.Item 
-                label="限价价格" 
+              <Form.Item
+                label="限价价格"
                 name="limitPrice"
                 rules={[
                   { required: true, message: '请输入限价价格' },
-                  { 
+                  {
                     validator: (_, value) => {
                       if (!value || parseFloat(value) <= 0) {
                         return Promise.reject('价格必须大于0')
@@ -1547,7 +1547,7 @@ const PositionList: React.FC = () => {
                 )}
               </Form.Item>
             )}
-            
+
             {orderType === 'MARKET' && (
               <div style={{ marginBottom: '16px', padding: '12px', background: '#f0f7ff', borderRadius: '8px' }}>
                 <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>市价参考（卖出）</div>
@@ -1562,26 +1562,26 @@ const PositionList: React.FC = () => {
                 </div>
               </div>
             )}
-            
+
             {/* 预计平仓收益 */}
             {sellQuantity && (
-              <div style={{ 
-                marginTop: '16px', 
-                padding: '16px', 
+              <div style={{
+                marginTop: '16px',
+                padding: '16px',
                 background: currentPnl.pnl >= 0 ? 'rgba(82, 196, 26, 0.08)' : 'rgba(245, 34, 45, 0.08)',
                 border: `1px solid ${currentPnl.pnl >= 0 ? 'rgba(82, 196, 26, 0.2)' : 'rgba(245, 34, 45, 0.2)'}`,
                 borderRadius: '8px'
               }}>
                 <div style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>预计平仓收益</div>
-                <div style={{ 
-                  fontSize: '20px', 
+                <div style={{
+                  fontSize: '20px',
                   fontWeight: 'bold',
                   color: currentPnl.pnl >= 0 ? '#52c41a' : '#f5222d',
                   marginBottom: '4px'
                 }}>
                   {currentPnl.pnl >= 0 ? '+' : ''}{formatUSDC(currentPnl.pnl)} USDC
                 </div>
-                <div style={{ 
+                <div style={{
                   fontSize: '14px',
                   color: currentPnl.percentPnl >= 0 ? '#52c41a' : '#f5222d',
                   fontWeight: '500'
@@ -1593,7 +1593,7 @@ const PositionList: React.FC = () => {
           </Form>
         )}
       </Modal>
-      
+
       {/* 赎回模态框 */}
       <Modal
         title="赎回仓位详情"
@@ -1628,7 +1628,7 @@ const PositionList: React.FC = () => {
                 </Tag>
               </Descriptions.Item>
             </Descriptions>
-            
+
             <div style={{ marginTop: '16px' }}>
               <div style={{ marginBottom: '8px', fontWeight: '500' }}>赎回仓位列表：</div>
               <Table
@@ -1686,11 +1686,11 @@ const PositionList: React.FC = () => {
                 ]}
               />
             </div>
-            
-            <div style={{ 
-              marginTop: '16px', 
-              padding: '12px', 
-              background: '#f0f9ff', 
+
+            <div style={{
+              marginTop: '16px',
+              padding: '12px',
+              background: '#f0f9ff',
               borderRadius: '8px',
               border: '1px solid #bae7ff'
             }}>

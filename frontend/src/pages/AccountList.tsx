@@ -26,18 +26,18 @@ const AccountList: React.FC = () => {
   const [editLoading, setEditLoading] = useState(false)
   const [accountImportModalVisible, setAccountImportModalVisible] = useState(false)
   const [accountImportForm] = Form.useForm()
-  
+
   useEffect(() => {
     fetchAccounts()
   }, [fetchAccounts])
-  
+
   const handleAccountImportSuccess = async () => {
     message.success(t('accountImport.importSuccess'))
     setAccountImportModalVisible(false)
     accountImportForm.resetFields()
     fetchAccounts()
   }
-  
+
   // 加载所有账户的余额
   useEffect(() => {
     const loadBalances = async () => {
@@ -46,8 +46,8 @@ const AccountList: React.FC = () => {
           setBalanceLoading(prev => ({ ...prev, [account.id]: true }))
           try {
             const balanceData = await fetchAccountBalance(account.id)
-            setBalanceMap(prev => ({ 
-              ...prev, 
+            setBalanceMap(prev => ({
+              ...prev,
               [account.id]: {
                 total: balanceData.totalBalance || '0',
                 available: balanceData.availableBalance || '0',
@@ -56,8 +56,8 @@ const AccountList: React.FC = () => {
             }))
           } catch (error) {
             console.error(`获取账户 ${account.id} 余额失败:`, error)
-            setBalanceMap(prev => ({ 
-              ...prev, 
+            setBalanceMap(prev => ({
+              ...prev,
               [account.id]: { total: '-', available: '-', position: '-' }
             }))
           } finally {
@@ -66,12 +66,12 @@ const AccountList: React.FC = () => {
         }
       }
     }
-    
+
     if (accounts.length > 0) {
       loadBalances()
     }
   }, [accounts])
-  
+
   const handleDelete = async (account: Account) => {
     try {
       await deleteAccount(account.id)
@@ -80,13 +80,13 @@ const AccountList: React.FC = () => {
       message.error(error.message || t('accountList.deleteFailed'))
     }
   }
-  
+
   const handleCopy = (text: string) => {
     if (!text) {
       message.warning(t('accountList.copyFailed') || '复制失败：地址为空')
       return
     }
-    
+
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(() => {
         message.success({
@@ -103,7 +103,7 @@ const AccountList: React.FC = () => {
       fallbackCopyTextToClipboard(text)
     }
   }
-  
+
   const fallbackCopyTextToClipboard = (text: string) => {
     const textArea = document.createElement('textarea')
     textArea.value = text
@@ -113,7 +113,7 @@ const AccountList: React.FC = () => {
     document.body.appendChild(textArea)
     textArea.focus()
     textArea.select()
-    
+
     try {
       const successful = document.execCommand('copy')
       if (successful) {
@@ -131,19 +131,19 @@ const AccountList: React.FC = () => {
       document.body.removeChild(textArea)
     }
   }
-  
+
   const handleShowDetail = async (account: Account) => {
     try {
       setDetailModalVisible(true)
       setDetailAccount(account)
       setDetailBalance(null)
       setDetailBalanceLoading(false)
-      
+
       // 加载详情和余额
       try {
         const accountDetail = await fetchAccountDetail(account.id)
         setDetailAccount(accountDetail)
-        
+
         // 加载余额
         setDetailBalanceLoading(true)
         try {
@@ -173,10 +173,10 @@ const AccountList: React.FC = () => {
       setDetailAccount(null)
     }
   }
-  
+
   const handleRefreshDetailBalance = async () => {
     if (!detailAccount) return
-    
+
     setDetailBalanceLoading(true)
     try {
       const balanceData = await fetchAccountBalance(detailAccount.id)
@@ -193,16 +193,16 @@ const AccountList: React.FC = () => {
       setDetailBalanceLoading(false)
     }
   }
-  
+
   const handleShowEdit = async (account: Account) => {
     try {
       setEditModalVisible(true)
       setEditAccount(account)
-      
+
       // 加载账户详情并设置表单初始值
       const accountDetail = await fetchAccountDetail(account.id)
       setEditAccount(accountDetail)
-      
+
       editForm.setFieldsValue({
         accountName: accountDetail.accountName || '',
         apiKey: '',  // 不显示实际值，留空表示不修改
@@ -216,10 +216,10 @@ const AccountList: React.FC = () => {
       setEditAccount(null)
     }
   }
-  
+
   const handleEditSubmit = async (values: any) => {
     if (!editAccount) return
-    
+
     setEditLoading(true)
     try {
       // 构建更新请求，只支持编辑账户名称
@@ -227,17 +227,17 @@ const AccountList: React.FC = () => {
         accountId: editAccount.id,
         accountName: values.accountName || undefined
       }
-      
+
       await updateAccount(updateData)
-      
+
       message.success(t('accountList.updateSuccess'))
       setEditModalVisible(false)
       setEditAccount(null)
       editForm.resetFields()
-      
+
       // 刷新账户列表
       await fetchAccounts()
-      
+
       // 如果详情 Modal 打开着，也刷新详情
       if (detailModalVisible && detailAccount && detailAccount.id === editAccount.id) {
         const accountDetail = await fetchAccountDetail(editAccount.id)
@@ -249,7 +249,7 @@ const AccountList: React.FC = () => {
       setEditLoading(false)
     }
   }
-  
+
   const columns = [
     {
       title: t('accountList.accountName'),
@@ -339,7 +339,7 @@ const AccountList: React.FC = () => {
           <Popconfirm
             title={t('accountList.deleteConfirm')}
             description={
-              record.apiKeyConfigured 
+              record.apiKeyConfigured
                 ? t('accountList.deleteConfirmDesc')
                 : t('accountList.deleteConfirmDescSimple')
             }
@@ -356,7 +356,7 @@ const AccountList: React.FC = () => {
       )
     }
   ]
-  
+
   const mobileColumns = [
     {
       title: t('accountList.accountName'),
@@ -364,16 +364,16 @@ const AccountList: React.FC = () => {
       render: (_: any, record: Account) => {
         return (
           <div style={{ padding: '8px 0' }}>
-            <div style={{ 
-              fontWeight: 'bold', 
+            <div style={{
+              fontWeight: 'bold',
               marginBottom: '8px',
               fontSize: '16px'
             }}>
               {record.accountName || `${t('accountList.accountName')} ${record.id}`}
             </div>
-            <div style={{ 
-              fontSize: '11px', 
-              color: '#666', 
+            <div style={{
+              fontSize: '11px',
+              color: '#666',
               marginBottom: '8px',
               wordBreak: 'break-all',
               fontFamily: 'monospace',
@@ -406,7 +406,7 @@ const AccountList: React.FC = () => {
                 />
               </div>
             </div>
-            <div style={{ 
+            <div style={{
               fontSize: '14px',
               fontWeight: '500',
               color: '#1890ff'
@@ -420,7 +420,7 @@ const AccountList: React.FC = () => {
               )}
             </div>
             {balanceMap[record.id] && balanceMap[record.id].available !== '-' && (
-              <div style={{ 
+              <div style={{
                 fontSize: '12px',
                 color: '#666',
                 marginTop: '4px'
@@ -459,7 +459,7 @@ const AccountList: React.FC = () => {
           <Popconfirm
             title={t('accountList.deleteConfirm')}
             description={
-              record.apiKeyConfigured 
+              record.apiKeyConfigured
                 ? t('accountList.deleteConfirmDesc')
                 : t('accountList.deleteConfirmDescSimple')
             }
@@ -468,9 +468,9 @@ const AccountList: React.FC = () => {
             cancelText={t('common.cancel')}
             okButtonProps={{ danger: true }}
           >
-            <Button 
-              size="small" 
-              block 
+            <Button
+              size="small"
+              block
               danger
               style={{ minHeight: '32px' }}
             >
@@ -481,15 +481,15 @@ const AccountList: React.FC = () => {
       )
     }
   ]
-  
+
   return (
-    <div style={{ 
+    <div style={{
       padding: isMobile ? '0' : undefined,
       margin: isMobile ? '0 -8px' : undefined
     }}>
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: isMobile ? '12px' : '16px',
         flexWrap: 'wrap',
@@ -510,8 +510,8 @@ const AccountList: React.FC = () => {
           {t('accountList.importAccount')}
         </Button>
       </div>
-      
-      <Card style={{ 
+
+      <Card style={{
         margin: isMobile ? '0 -8px' : '0',
         borderRadius: isMobile ? '0' : undefined
       }}>
@@ -544,7 +544,7 @@ const AccountList: React.FC = () => {
           />
         )}
       </Card>
-      
+
       {/* 账户详情 Modal */}
       <Modal
         title={detailAccount ? (detailAccount.accountName || `${t('accountList.accountName')} ${detailAccount.id}`) : t('accountList.accountDetail')}
@@ -555,19 +555,19 @@ const AccountList: React.FC = () => {
           setDetailBalance(null)
         }}
         footer={[
-          <Button 
-            key="refresh" 
-            icon={<ReloadOutlined />} 
-            onClick={handleRefreshDetailBalance} 
+          <Button
+            key="refresh"
+            icon={<ReloadOutlined />}
+            onClick={handleRefreshDetailBalance}
             loading={detailBalanceLoading}
             disabled={!detailAccount}
           >
             {t('accountList.refreshBalance')}
           </Button>,
-          <Button 
-            key="edit" 
+          <Button
+            key="edit"
             type="primary"
-            icon={<EditOutlined />} 
+            icon={<EditOutlined />}
             onClick={() => {
               if (detailAccount) {
                 setDetailModalVisible(false)
@@ -578,8 +578,8 @@ const AccountList: React.FC = () => {
           >
             {t('accountList.edit')}
           </Button>,
-          <Button 
-            key="close" 
+          <Button
+            key="close"
             onClick={() => {
               setDetailModalVisible(false)
               setDetailAccount(null)
@@ -610,8 +610,8 @@ const AccountList: React.FC = () => {
               </Descriptions.Item>
               <Descriptions.Item label={t('accountList.walletAddress')} span={isMobile ? 1 : 2}>
                 <Space>
-                  <span style={{ 
-                    fontFamily: 'monospace', 
+                  <span style={{
+                    fontFamily: 'monospace',
                     fontSize: isMobile ? '11px' : '13px',
                     wordBreak: 'break-all',
                     lineHeight: '1.4',
@@ -633,8 +633,8 @@ const AccountList: React.FC = () => {
               </Descriptions.Item>
               <Descriptions.Item label={t('accountList.proxyAddress')} span={isMobile ? 1 : 2}>
                 <Space>
-                  <span style={{ 
-                    fontFamily: 'monospace', 
+                  <span style={{
+                    fontFamily: 'monospace',
                     fontSize: isMobile ? '11px' : '13px',
                     wordBreak: 'break-all',
                     lineHeight: '1.4',
@@ -688,9 +688,9 @@ const AccountList: React.FC = () => {
                 )}
               </Descriptions.Item>
             </Descriptions>
-            
+
             <Divider />
-            
+
             <Descriptions
               column={isMobile ? 1 : 2}
               bordered
@@ -720,51 +720,51 @@ const AccountList: React.FC = () => {
                 )}
               </Descriptions.Item>
             </Descriptions>
-            
-            {(detailAccount.totalOrders !== undefined || detailAccount.totalPnl !== undefined || 
-              detailAccount.activeOrders !== undefined || 
+
+            {(detailAccount.totalOrders !== undefined || detailAccount.totalPnl !== undefined ||
+              detailAccount.activeOrders !== undefined ||
               detailAccount.completedOrders !== undefined || detailAccount.positionCount !== undefined) && (
-              <>
-                <Divider />
-                <Descriptions
-                  column={isMobile ? 1 : 2}
-                  bordered
-                  size={isMobile ? 'small' : 'middle'}
-                  title={t('accountList.statistics')}
-                >
-                  {detailAccount.totalOrders !== undefined && (
-                    <Descriptions.Item label={t('accountList.totalOrders')}>
-                      {detailAccount.totalOrders}
-                    </Descriptions.Item>
-                  )}
-                  {detailAccount.activeOrders !== undefined && (
-                    <Descriptions.Item label={t('accountList.activeOrdersCount')}>
-                      <Tag color={detailAccount.activeOrders > 0 ? 'orange' : 'default'}>{detailAccount.activeOrders}</Tag>
-                    </Descriptions.Item>
-                  )}
-                  {detailAccount.completedOrders !== undefined && (
-                    <Descriptions.Item label={t('accountList.completedOrders')}>
-                      <Tag color="success">{detailAccount.completedOrders}</Tag>
-                    </Descriptions.Item>
-                  )}
-                  {detailAccount.positionCount !== undefined && (
-                    <Descriptions.Item label={t('accountList.positionCount')}>
-                      <Tag color={detailAccount.positionCount > 0 ? 'blue' : 'default'}>{detailAccount.positionCount}</Tag>
-                    </Descriptions.Item>
-                  )}
-                  {detailAccount.totalPnl !== undefined && (
-                    <Descriptions.Item label={t('accountList.totalPnl')}>
-                      <span style={{ 
-                        fontWeight: 'bold',
-                        color: detailAccount.totalPnl && detailAccount.totalPnl.startsWith('-') ? '#ff4d4f' : '#52c41a'
-                      }}>
-                        {formatUSDC(detailAccount.totalPnl)} USDC
-                      </span>
-                    </Descriptions.Item>
-                  )}
-                </Descriptions>
-              </>
-            )}
+                <>
+                  <Divider />
+                  <Descriptions
+                    column={isMobile ? 1 : 2}
+                    bordered
+                    size={isMobile ? 'small' : 'middle'}
+                    title={t('accountList.statistics')}
+                  >
+                    {detailAccount.totalOrders !== undefined && (
+                      <Descriptions.Item label={t('accountList.totalOrders')}>
+                        {detailAccount.totalOrders}
+                      </Descriptions.Item>
+                    )}
+                    {detailAccount.activeOrders !== undefined && (
+                      <Descriptions.Item label={t('accountList.activeOrdersCount')}>
+                        <Tag color={detailAccount.activeOrders > 0 ? 'orange' : 'default'}>{detailAccount.activeOrders}</Tag>
+                      </Descriptions.Item>
+                    )}
+                    {detailAccount.completedOrders !== undefined && (
+                      <Descriptions.Item label={t('accountList.completedOrders')}>
+                        <Tag color="success">{detailAccount.completedOrders}</Tag>
+                      </Descriptions.Item>
+                    )}
+                    {detailAccount.positionCount !== undefined && (
+                      <Descriptions.Item label={t('accountList.positionCount')}>
+                        <Tag color={detailAccount.positionCount > 0 ? 'blue' : 'default'}>{detailAccount.positionCount}</Tag>
+                      </Descriptions.Item>
+                    )}
+                    {detailAccount.totalPnl !== undefined && (
+                      <Descriptions.Item label={t('accountList.totalPnl')}>
+                        <span style={{
+                          fontWeight: 'bold',
+                          color: detailAccount.totalPnl && detailAccount.totalPnl.startsWith('-') ? '#ff4d4f' : '#52c41a'
+                        }}>
+                          {formatUSDC(detailAccount.totalPnl)} USDC
+                        </span>
+                      </Descriptions.Item>
+                    )}
+                  </Descriptions>
+                </>
+              )}
           </div>
         ) : (
           <div style={{ textAlign: 'center', padding: '20px' }}>
@@ -773,7 +773,7 @@ const AccountList: React.FC = () => {
           </div>
         )}
       </Modal>
-      
+
       {/* 编辑账户 Modal */}
       <Modal
         title={editAccount ? `${t('accountList.editAccount')} - ${editAccount.accountName || `${t('accountList.accountName')} ${editAccount.id}`}` : t('accountList.editAccount')}
@@ -804,17 +804,17 @@ const AccountList: React.FC = () => {
               showIcon
               style={{ marginBottom: '24px' }}
             />
-            
+
             <Form.Item
               label={t('accountList.accountName') || '账户名称'}
               name="accountName"
             >
               <Input placeholder={t('accountList.accountNamePlaceholder') || '请输入账户名称（可选）'} />
             </Form.Item>
-            
+
             <Form.Item>
               <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-                <Button 
+                <Button
                   onClick={() => {
                     setEditModalVisible(false)
                     setEditAccount(null)
@@ -844,7 +844,7 @@ const AccountList: React.FC = () => {
           </div>
         )}
       </Modal>
-      
+
       {/* 导入账户 Modal */}
       <Modal
         title={t('accountImport.title')}

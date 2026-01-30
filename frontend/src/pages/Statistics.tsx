@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import type { Dayjs } from 'dayjs'
 import { apiService } from '../services/api'
 import type { Statistics as StatisticsType } from '../types'
-import { formatUSDC } from '../utils'
+import { formatUSDC, formatNumber } from '../utils'
 import { useMediaQuery } from 'react-responsive'
 
 const { RangePicker } = DatePicker
@@ -17,17 +17,17 @@ const Statistics: React.FC = () => {
   const [stats, setStats] = useState<StatisticsType | null>(null)
   const [loading, setLoading] = useState(false)
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([null, null])
-  
+
   useEffect(() => {
     fetchStatistics()
   }, [])
-  
+
   const fetchStatistics = async () => {
     setLoading(true)
     try {
       const startTime = dateRange[0] ? dateRange[0].valueOf() : undefined
       const endTime = dateRange[1] ? dateRange[1].valueOf() : undefined
-      
+
       const response = await apiService.statistics.global({ startTime, endTime })
       if (response.data.code === 0 && response.data.data) {
         setStats(response.data.data)
@@ -40,11 +40,11 @@ const Statistics: React.FC = () => {
       setLoading(false)
     }
   }
-  
+
   const handleDateRangeChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
     setDateRange(dates || [null, null])
   }
-  
+
   const handleReset = () => {
     setDateRange([null, null])
     // 重置后自动刷新
@@ -52,7 +52,7 @@ const Statistics: React.FC = () => {
       fetchStatistics()
     }, 100)
   }
-  
+
   return (
     <div>
       <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
@@ -85,13 +85,13 @@ const Statistics: React.FC = () => {
           )}
         </Space>
       </div>
-      
+
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} md={8}>
           <Card>
             <Statistic
               title={t('statistics.totalOrders') || '总订单数'}
-              value={stats?.totalOrders || 0}
+              value={formatNumber(stats?.totalOrders || 0)}
               loading={loading}
             />
           </Card>

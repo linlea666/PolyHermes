@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Card, Row, Col, Statistic, Tag, Button, message, Spin } from 'antd'
 import { ArrowUpOutlined, ArrowDownOutlined, LeftOutlined } from '@ant-design/icons'
 import { apiService } from '../services/api'
-import { formatUSDC } from '../utils'
+import { formatUSDC, formatNumber } from '../utils'
 import { useMediaQuery } from 'react-responsive'
 import type { CopyTradingStatistics } from '../types'
 
@@ -13,16 +13,16 @@ const CopyTradingStatisticsPage: React.FC = () => {
   useMediaQuery({ maxWidth: 768 }) // 用于响应式布局，但当前页面未使用
   const [loading, setLoading] = useState(false)
   const [statistics, setStatistics] = useState<CopyTradingStatistics | null>(null)
-  
+
   useEffect(() => {
     if (copyTradingId) {
       fetchStatistics()
     }
   }, [copyTradingId])
-  
+
   const fetchStatistics = async () => {
     if (!copyTradingId) return
-    
+
     setLoading(true)
     try {
       const response = await apiService.statistics.detail({ copyTradingId: parseInt(copyTradingId) })
@@ -37,25 +37,25 @@ const CopyTradingStatisticsPage: React.FC = () => {
       setLoading(false)
     }
   }
-  
+
   const getPnlColor = (value: string): string => {
     const num = parseFloat(value)
     if (isNaN(num)) return '#666'
     return num >= 0 ? '#3f8600' : '#cf1322'
   }
-  
+
   const getPnlIcon = (value: string) => {
     const num = parseFloat(value)
     if (isNaN(num)) return null
     return num >= 0 ? <ArrowUpOutlined /> : <ArrowDownOutlined />
   }
-  
+
   const formatPercent = (value: string): string => {
     const num = parseFloat(value)
     if (isNaN(num)) return '-'
     return `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`
   }
-  
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '50px' }}>
@@ -63,7 +63,7 @@ const CopyTradingStatisticsPage: React.FC = () => {
       </div>
     )
   }
-  
+
   if (!statistics) {
     return (
       <Card>
@@ -74,7 +74,7 @@ const CopyTradingStatisticsPage: React.FC = () => {
       </Card>
     )
   }
-  
+
   return (
     <div>
       <Card style={{ marginBottom: 16 }}>
@@ -98,7 +98,7 @@ const CopyTradingStatisticsPage: React.FC = () => {
           </div>
         </div>
       </Card>
-      
+
       {/* 基本信息卡片 */}
       <Card title="基本信息" style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]}>
@@ -130,14 +130,14 @@ const CopyTradingStatisticsPage: React.FC = () => {
           </Col>
         </Row>
       </Card>
-      
+
       {/* 买入统计卡片 */}
       <Card title="买入统计" style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={12} md={6}>
             <Statistic
               title="总买入数量"
-              value={formatUSDC(statistics.totalBuyQuantity)}
+              value={formatNumber(statistics.totalBuyQuantity, 4)}
               suffix=""
             />
           </Col>
@@ -151,27 +151,27 @@ const CopyTradingStatisticsPage: React.FC = () => {
           <Col xs={24} sm={12} md={6}>
             <Statistic
               title="总买入订单数"
-              value={statistics.totalBuyOrders}
+              value={formatNumber(statistics.totalBuyOrders)}
               suffix="笔"
             />
           </Col>
           <Col xs={24} sm={12} md={6}>
             <Statistic
               title="平均买入价格"
-              value={formatUSDC(statistics.avgBuyPrice)}
+              value={formatNumber(statistics.avgBuyPrice, 4)}
               suffix=""
             />
           </Col>
         </Row>
       </Card>
-      
+
       {/* 卖出统计卡片 */}
       <Card title="卖出统计" style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={12} md={8}>
             <Statistic
               title="总卖出数量"
-              value={formatUSDC(statistics.totalSellQuantity)}
+              value={formatNumber(statistics.totalSellQuantity, 4)}
               suffix=""
             />
           </Col>
@@ -185,33 +185,33 @@ const CopyTradingStatisticsPage: React.FC = () => {
           <Col xs={24} sm={12} md={8}>
             <Statistic
               title="总卖出订单数"
-              value={statistics.totalSellOrders}
+              value={formatNumber(statistics.totalSellOrders)}
               suffix="笔"
             />
           </Col>
         </Row>
       </Card>
-      
+
       {/* 持仓统计卡片 */}
       <Card title="持仓统计" style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={12} md={12}>
             <Statistic
               title="当前持仓数量"
-              value={formatUSDC(statistics.currentPositionQuantity)}
+              value={formatNumber(statistics.currentPositionQuantity, 4)}
               suffix=""
             />
           </Col>
           <Col xs={24} sm={12} md={12}>
             <Statistic
               title="平均买入价格"
-              value={formatUSDC(statistics.avgBuyPrice)}
+              value={formatNumber(statistics.avgBuyPrice, 4)}
               suffix=""
             />
           </Col>
         </Row>
       </Card>
-      
+
       {/* 盈亏统计卡片 */}
       <Card title="盈亏统计">
         <Row gutter={[16, 16]}>
