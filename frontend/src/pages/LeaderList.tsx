@@ -4,7 +4,7 @@ import { Card, Table, Button, Space, Tag, Popconfirm, message, List, Empty, Spin
 import { PlusOutlined, EditOutlined, DeleteOutlined, GlobalOutlined, EyeOutlined, ReloadOutlined, WalletOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { apiService } from '../services/api'
-import type { Leader, LeaderBalanceResponse, PositionDto } from '../types'
+import type { Leader, LeaderBalanceResponse } from '../types'
 import { useMediaQuery } from 'react-responsive'
 import { formatUSDC } from '../utils'
 
@@ -215,9 +215,6 @@ const LeaderList: React.FC = () => {
             const color = numPnl > 0 ? '#52c41a' : '#ff4d4f'
             return <Text style={{ color }}>{formatUSDC(pnl)}</Text>
           }
-          const numPnl = parseFloat(pnl)
-          const color = numPnl > 0 ? '#52c41a' : '#ff4d4f'
-          return <Text style={{ color }}>{formatUSDC(pnl)}</Text>
         }
       }
     ]
