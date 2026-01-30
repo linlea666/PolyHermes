@@ -248,14 +248,14 @@ const LeaderList: React.FC = () => {
       }
     },
     {
-      title: t('leaderDetail.totalBalance'),
+      title: t('leaderDetail.availableBalance'),
       key: 'balance',
       width: 150,
       render: (_: any, record: Leader) => {
         const balance = balanceMap[record.id]
         if (!balance) return <Spin size="small" />
-        const displayText = balance.total === '-' ? '-' : `${formatUSDC(balance.total)} USDC`
-        return <Text style={{ color: '#52c41a', fontWeight: 'bold', fontSize: '14px' }}>{displayText}</Text>
+        const displayText = balance.available === '-' ? '-' : `${formatUSDC(balance.available)} USDC`
+        return <Text style={{ color: '#1890ff', fontSize: '14px' }}>{displayText}</Text>
       }
     },
     {
@@ -337,10 +337,10 @@ const LeaderList: React.FC = () => {
                       {balance && (
                         <div style={{ marginBottom: '12px', padding: '12px', backgroundColor: '#f6ffed', borderRadius: '8px', border: '1px solid #b7eb8f' }}>
                           <div style={{ fontSize: '13px', color: '#52c41a', fontWeight: 'bold', marginBottom: '4px' }}>
-                            {t('leaderDetail.totalBalance')}: {balance.total === '-' ? '-' : `${formatUSDC(balance.total)} USDC`}
+                            {t('leaderDetail.availableBalance')}: {balance.available === '-' ? '-' : `${formatUSDC(balance.available)} USDC`}
                           </div>
                           <div style={{ fontSize: '11px', color: '#666' }}>
-                            {t('leaderDetail.availableBalance')}: {formatUSDC(balance.available)} | {t('leaderDetail.positionBalance')}: {formatUSDC(balance.position)}
+                            {t('leaderDetail.positionBalance')}: {formatUSDC(balance.position)}
                           </div>
                         </div>
                       )}
