@@ -404,14 +404,21 @@ open class CopyOrderTrackingService(
                         continue
                     }
 
-                    if (buyQuantity.lt(BigDecimal.ONE)) {
-                        logger.warn("计算得到的买入数量小于1，自动调整为1 (Polymarket 最小下单数量): copyTradingId=${copyTrading.id}, tradeId=${trade.id}, originalQuantity=$buyQuantity")
-                        buyQuantity = BigDecimal.ONE
+                    // Polymarket 最小订单金额为 $1，需要确保 价格 × 数量 >= $1
+                    val tradePrice = trade.price.toSafeBigDecimal()
+                    val orderAmount = buyQuantity.multi(tradePrice)
+                    val polymarketMinOrderAmount = BigDecimal.ONE  // Polymarket 最小订单金额 $1
+
+                    if (orderAmount.lt(polymarketMinOrderAmount)) {
+                        // 计算满足最小订单金额所需的数量（向上取整）
+                        val minQuantityForAmount = polymarketMinOrderAmount.div(tradePrice, 8, java.math.RoundingMode.CEILING)
+                        logger.warn("订单金额 $orderAmount 小于 Polymarket 最小订单金额 \$1，调整数量: copyTradingId=${copyTrading.id}, tradeId=${trade.id}, price=$tradePrice, originalQuantity=$buyQuantity, adjustedQuantity=$minQuantityForAmount")
+                        buyQuantity = minQuantityForAmount
                     }
                     // 验证订单数量限制（仅比例模式）
                     var finalBuyQuantity = buyQuantity
                     if (copyTrading.copyMode == "RATIO") {
-                        val tradePrice = trade.price.toSafeBigDecimal()
+                        // tradePrice 已在上面定义
                         val rawOrderAmount = buyQuantity.multi(tradePrice)
 
                         // 对按比例计算的金额进行向上取整处理（确保满足最小限制）
@@ -895,13 +902,10 @@ open class CopyOrderTrackingService(
             }
         }
 
-        // 如果需要卖出的数量小于1（但大于0），自动调整为1（Polymarket 最小下单数量）
-        // 注意：如果实际持有数量不足1，后续的 totalMatched 检查会拦截
+        // 注意：Polymarket 最小订单金额为 $1（金额 = 价格 × 数量）
+        // 由于卖出数量受限于实际持仓，这里先保留原始计算值
+        // 后续会在实际匹配后检查订单金额是否满足最小要求
         var finalNeedMatch = needMatch
-        if (finalNeedMatch.gt(BigDecimal.ZERO) && finalNeedMatch.lt(BigDecimal.ONE)) {
-            logger.warn("计算得到的卖出数量小于1，自动调整为1: copyTradingId=${copyTrading.id}, original=$needMatch")
-            finalNeedMatch = BigDecimal.ONE
-        }
 
         // 4. 获取tokenId（直接使用outcomeIndex，支持多元市场）
         val tokenIdResult = blockchainService.getTokenId(leaderSellTrade.market, leaderSellTrade.outcomeIndex)
@@ -963,8 +967,11 @@ open class CopyOrderTrackingService(
             return
         }
 
-        if (totalMatched.lt(BigDecimal.ONE)) {
-            logger.warn("卖出数量小于1，跳过卖出 (Polymarket 最小下单数量为 1): copyTradingId=${copyTrading.id}, tradeId=${leaderSellTrade.id}, quantity=$totalMatched")
+        // Polymarket 最小订单金额为 $1，检查 价格 × 数量 >= $1
+        val sellOrderAmount = sellPrice.multi(totalMatched)
+        val polymarketMinSellAmount = BigDecimal.ONE
+        if (sellOrderAmount.lt(polymarketMinSellAmount)) {
+            logger.warn("卖出订单金额 $sellOrderAmount 小于 Polymarket 最小订单金额 \$1，跳过卖出: copyTradingId=${copyTrading.id}, tradeId=${leaderSellTrade.id}, price=$sellPrice, quantity=$totalMatched")
             return
         }
 
