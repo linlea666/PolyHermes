@@ -164,6 +164,29 @@ Deploy both frontend and backend together in a single Docker container, using Ng
 
 **Deployment Steps**:
 
+#### ⚡ One-Liner Installation (Fastest, Recommended for New Users)
+
+**Using curl (Recommended):**
+```bash
+mkdir -p ~/polyhermes && cd ~/polyhermes && curl -fsSL https://raw.githubusercontent.com/WrBug/PolyHermes/main/deploy-interactive.sh -o deploy.sh && chmod +x deploy.sh && ./deploy.sh
+```
+
+**Using wget:**
+```bash
+mkdir -p ~/polyhermes && cd ~/polyhermes && wget -O deploy.sh https://raw.githubusercontent.com/WrBug/PolyHermes/main/deploy-interactive.sh && chmod +x deploy.sh && ./deploy.sh
+```
+
+This command will automatically:
+- 📁 Create dedicated working directory `~/polyhermes`
+- ✅ Automatically check Docker environment
+- ⚙️ Interactive configuration for all parameters (supports pressing Enter for defaults)
+- 🔐 Automatically generate secure random keys
+- 🚀 Automatically download latest images and deploy
+
+---
+
+#### 📋 Alternative Deployment Methods
+
 1. **Using Docker Hub Images (Recommended, Production First Choice)**
 
 **Method 1: Standalone Deployment (No code clone required, Recommended)**

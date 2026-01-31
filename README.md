@@ -165,6 +165,29 @@
 
 **部署步骤**：
 
+#### ⚡ 一键安装（最快，推荐新用户）
+
+**使用 curl（推荐）：**
+```bash
+mkdir -p ~/polyhermes && cd ~/polyhermes && curl -fsSL https://raw.githubusercontent.com/WrBug/PolyHermes/main/deploy-interactive.sh -o deploy.sh && chmod +x deploy.sh && ./deploy.sh
+```
+
+**使用 wget：**
+```bash
+mkdir -p ~/polyhermes && cd ~/polyhermes && wget -O deploy.sh https://raw.githubusercontent.com/WrBug/PolyHermes/main/deploy-interactive.sh && chmod +x deploy.sh && ./deploy.sh
+```
+
+这个命令会自动：
+- 📁 创建专用工作目录 `~/polyhermes`
+- ✅ 自动检查 Docker 环境
+- ⚙️ 交互式配置所有参数（支持回车使用默认值）
+- 🔐 自动生成安全的随机密钥
+- 🚀 自动下载最新镜像并部署
+
+---
+
+#### 📋 其他部署方式
+
 1. **使用 Docker Hub 镜像（推荐，生产环境首选）**
 
 **方式 1：独立部署（无需 clone 代码，推荐）**
