@@ -19,6 +19,7 @@ const BacktestDetail: React.FC = () => {
   const [, setConfig] = useState<BacktestConfigDto | null>(null)
   const [statistics, setStatistics] = useState<BacktestStatisticsDto | null>(null)
   const [trades, setTrades] = useState<BacktestTradeDto[]>([])
+  const [allTrades, setAllTrades] = useState<BacktestTradeDto[]>([])  // 用于图表显示的所有交易数据
   const [tradesLoading, setTradesLoading] = useState(false)
   const [tradesTotal, setTradesTotal] = useState(0)
   const [tradesPage, setTradesPage] = useState(1)
@@ -68,10 +69,27 @@ const BacktestDetail: React.FC = () => {
     }
   }
 
+  // 获取所有交易记录（用于图表显示）
+  const fetchAllTrades = async () => {
+    try {
+      const response = await backtestService.trades({
+        taskId: parseInt(id!),
+        page: 1,
+        size: 10000  // 获取所有数据
+      })
+      if (response.data.code === 0 && response.data.data) {
+        setAllTrades(response.data.data.list)
+      }
+    } catch (error) {
+      console.error('Failed to fetch all trades for chart:', error)
+    }
+  }
+
   // 初始加载任务详情和交易记录
   useEffect(() => {
     fetchTaskDetail()
     fetchTrades(tradesPage)
+    fetchAllTrades()  // 加载所有交易数据用于图表
   }, [id])
 
   // 根据任务状态控制轮询
@@ -416,9 +434,9 @@ const BacktestDetail: React.FC = () => {
           )}
 
           {/* 资金变化图表 */}
-          {trades.length > 0 && (
+          {allTrades.length > 0 && (
             <Card title={t('backtest.balanceChart')}>
-              <BacktestChart trades={trades} />
+              <BacktestChart trades={allTrades} />
             </Card>
           )}
 
