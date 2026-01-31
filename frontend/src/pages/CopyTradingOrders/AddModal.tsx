@@ -676,8 +676,13 @@ const AddModal: React.FC<AddModalProps> = ({
                       if (value === undefined || value === null || value === '') {
                         return Promise.resolve()
                       }
-                      if (typeof value === 'number' && value < 1) {
-                        return Promise.reject(new Error(t('copyTradingAdd.minOrderSizeMin') || '最小金额必须 >= 1'))
+                      // FUND_RATIO 模式允许更小的值（>= 0.01），RATIO 模式保持 >= 1
+                      const minValue = copyMode === 'FUND_RATIO' ? 0.01 : 1
+                      if (typeof value === 'number' && value < minValue) {
+                        const errorMsg = copyMode === 'FUND_RATIO'
+                          ? (t('copyTradingAdd.minCopyAmountMin') || '最小跟单金额必须 >= 0.01')
+                          : (t('copyTradingAdd.minOrderSizeMin') || '最小金额必须 >= 1')
+                        return Promise.reject(new Error(errorMsg))
                       }
                       return Promise.resolve()
                     }
@@ -685,11 +690,13 @@ const AddModal: React.FC<AddModalProps> = ({
                 ]}
               >
                 <InputNumber
-                  min={1}
+                  min={copyMode === 'FUND_RATIO' ? 0.01 : 1}
                   step={0.0001}
                   precision={4}
                   style={{ width: '100%' }}
-                  placeholder={t('copyTradingAdd.minOrderSizePlaceholder') || '仅在比例模式下生效，必须 >= 1（可选）'}
+                  placeholder={copyMode === 'FUND_RATIO'
+                    ? (t('copyTradingAdd.minCopyAmountPlaceholder') || '最小跟单金额，>= 0.01（可选）')
+                    : (t('copyTradingAdd.minOrderSizePlaceholder') || '仅在比例模式下生效，必须 >= 1（可选）')}
                   formatter={(value) => {
                     if (!value && value !== 0) return ''
                     const num = parseFloat(value.toString())
