@@ -107,20 +107,21 @@ class BacktestExecutionService(
             logger.info("回测时间范围: ${formatTimestamp(startTime)} - ${formatTimestamp(endTime)}, " +
                 "初始余额: ${task.initialBalance.toPlainString()}")
 
-            // 4. 恢复机制：如果有恢复点，计算从哪一页开始
-            val startPage = if (task.lastProcessedTradeIndex != null && task.lastProcessedTradeIndex >= 0) {
-                val lastProcessedIndex = task.lastProcessedTradeIndex
-                val calculatedPage = (lastProcessedIndex / size) + 1
+            // 4. 恢复机制：如果有恢复点，计算从哪一页开始（页码从 0 开始）
+            val startPage = if (task.lastProcessedTradeIndex != null) {
+                val lastProcessedIndex = task.lastProcessedTradeIndex!!
+                // 计算已处理的页码（从 0 开始）
+                val processedPage = lastProcessedIndex / size
 
                 // 特殊情况：如果lastProcessedTradeIndex刚好是100的倍数减1（比如99,199,299...）
                 // 说明该页已经完全处理，应该从下一页开始
                 val nextPage = if (lastProcessedIndex % size == size - 1) {
-                    calculatedPage + 1
+                    processedPage + 1
                 } else {
-                    calculatedPage
+                    processedPage
                 }
 
-                logger.info("恢复任务：已处理索引=$lastProcessedIndex, 从第 $nextPage 页开始")
+                logger.info("恢复任务：已处理索引=$lastProcessedIndex, 计算页码=$nextPage, size=$size")
                 nextPage
             } else {
                 logger.info("新任务：从第0页开始")
@@ -129,13 +130,14 @@ class BacktestExecutionService(
 
             // 5. 分页获取和处理交易数据
             var currentPage = maxOf(startPage, page)
-            var globalIndex = if (currentPage > 1 && task.lastProcessedTradeIndex != null) {
-                task.lastProcessedTradeIndex + 1
+            // 计算下一个要处理的全局索引（用于日志和统计）
+            val nextGlobalIndex = if (task.lastProcessedTradeIndex != null) {
+                task.lastProcessedTradeIndex!! + 1
             } else {
                 0
             }
 
-            logger.info("开始分页处理：起始页=$currentPage, 起始索引=$globalIndex")
+            logger.info("开始分页处理：起始页=$currentPage, 下一个要处理的索引=$nextGlobalIndex")
 
             while (true) {
                 // 定期从数据库重新加载任务状态，确保能及时响应停止操作
@@ -168,9 +170,20 @@ class BacktestExecutionService(
                     logger.info("第 $currentPage 页获取到 ${pageTrades.size} 条交易")
 
                     // 处理当前页的交易
+                    var lastProcessedIndexInPage: Int? = null
                     for (localIndex in pageTrades.indices) {
                         val leaderTrade = pageTrades[localIndex]
-                        val index = globalIndex + localIndex
+                        // 计算当前交易在全局数据中的索引（从 0 开始）
+                        val index = currentPage * size + localIndex
+
+                        // 如果是恢复任务，跳过已处理的条目
+                        if (task.lastProcessedTradeIndex != null && index <= task.lastProcessedTradeIndex!!) {
+                            logger.debug("跳过已处理的交易: index=$index, lastProcessedIndex=${task.lastProcessedTradeIndex}")
+                            continue
+                        }
+
+                        // 记录当前处理的索引
+                        lastProcessedIndexInPage = index
 
                         // 更新进度
                         val progress = if (pageTrades.size > 0) {
@@ -380,10 +393,10 @@ class BacktestExecutionService(
 
                         // 更新当前页的最后处理信息
                         val lastTradeInPage = currentPageTrades.lastOrNull()
-                        if (lastTradeInPage != null) {
+                        if (lastTradeInPage != null && lastProcessedIndexInPage != null) {
                             task.lastProcessedTradeTime = lastTradeInPage.tradeTime
-                            task.lastProcessedTradeIndex = globalIndex + pageTrades.size - 1
-                            task.processedTradeCount = task.lastProcessedTradeIndex + 1
+                            task.lastProcessedTradeIndex = lastProcessedIndexInPage
+                            task.processedTradeCount = lastProcessedIndexInPage + 1
                             task.finalBalance = currentBalance
                             backtestTaskRepository.save(task)
 
@@ -396,11 +409,7 @@ class BacktestExecutionService(
                     // 将当前页交易添加到全局列表（用于最终统计）
                     trades.addAll(currentPageTrades)
 
-                    // 将当前页交易添加到全局列表（用于最终统计）
-                    trades.addAll(currentPageTrades)
-
-                    // 更新全局索引，准备处理下一页
-                    globalIndex += pageTrades.size
+                    // 准备处理下一页
                     currentPage++
 
                 } catch (e: Exception) {

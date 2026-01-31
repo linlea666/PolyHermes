@@ -93,25 +93,26 @@ class BacktestPollingService(
                     runBlocking {
                         // 支持恢复：如果有恢复点，计算从哪一页开始
                         val pageSize = 100
-                        val page = if (currentTask.lastProcessedTradeIndex != null && currentTask.lastProcessedTradeIndex >= 0) {
-                            // 从第几页开始（页码从 1 开始）
-                            // 例如：已处理了99笔，lastProcessedTradeIndex=99，应从第2页开始
-                            // 例如：已处理了0笔，lastProcessedTradeIndex=0，应从第1页开始（因为第1页的第1笔已经处理）
-                            val lastProcessedIndex = currentTask.lastProcessedTradeIndex
-                            val calculatedPage = (lastProcessedIndex / pageSize) + 1
+                        val page = if (currentTask.lastProcessedTradeIndex != null) {
+                            // 从第几页开始（页码从 0 开始）
+                            // 例如：已处理了99笔，lastProcessedTradeIndex=99，应从第1页开始（offset=100）
+                            val lastProcessedIndex = currentTask.lastProcessedTradeIndex!!
+                            // 计算已处理的页码（从 0 开始）
+                            val processedPage = lastProcessedIndex / pageSize
 
                             // 特殊情况：如果lastProcessedTradeIndex刚好是100的倍数减1（比如99,199,299...）
                             // 说明该页已经完全处理，应该从下一页开始
                             val nextPage = if (lastProcessedIndex % pageSize == pageSize - 1) {
-                                calculatedPage + 1
+                                processedPage + 1
                             } else {
-                                calculatedPage
+                                processedPage
                             }
 
                             logger.info("恢复任务：已处理索引=$lastProcessedIndex, 计算页码=$nextPage, size=$pageSize")
                             nextPage
                         } else {
-                            1  // 从第一页开始
+                            logger.info("新任务：从第0页开始")
+                            0  // 从第0页开始（offset=0）
                         }
 
                         logger.info("执行回测任务: taskId=${currentTask.id}, page=$page, size=$pageSize")

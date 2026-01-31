@@ -134,7 +134,7 @@ data class BacktestTask(
     var lastProcessedTradeTime: Long? = null,
 
     @Column(name = "last_processed_trade_index")
-    var lastProcessedTradeIndex: Int = 0,
+    var lastProcessedTradeIndex: Int? = null,
 
     @Column(name = "processed_trade_count")
     var processedTradeCount: Int = 0
