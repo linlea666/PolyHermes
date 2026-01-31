@@ -12,7 +12,7 @@ const TemplateAdd: React.FC = () => {
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
-  const [copyMode, setCopyMode] = useState<'RATIO' | 'FIXED'>('RATIO')
+  const [copyMode, setCopyMode] = useState<'RATIO' | 'FIXED' | 'FUND_RATIO'>('RATIO')
   
   const handleSubmit = async (values: any) => {
     // 前端校验：如果填写了 minOrderSize，必须 >= 1

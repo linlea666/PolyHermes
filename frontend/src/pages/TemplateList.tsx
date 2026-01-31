@@ -20,7 +20,7 @@ const TemplateList: React.FC = () => {
   const [copyModalVisible, setCopyModalVisible] = useState(false)
   const [copyForm] = Form.useForm()
   const [copyLoading, setCopyLoading] = useState(false)
-  const [copyMode, setCopyMode] = useState<'RATIO' | 'FIXED'>('RATIO')
+  const [copyMode, setCopyMode] = useState<'RATIO' | 'FIXED' | 'FUND_RATIO'>('RATIO')
   const [_sourceTemplate, setSourceTemplate] = useState<CopyTradingTemplate | null>(null) // 用于跟踪复制的源模板
   
   useEffect(() => {

@@ -15,7 +15,7 @@ const TemplateEdit: React.FC = () => {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(false)
-  const [copyMode, setCopyMode] = useState<'RATIO' | 'FIXED'>('RATIO')
+  const [copyMode, setCopyMode] = useState<'RATIO' | 'FIXED' | 'FUND_RATIO'>('RATIO')
   
   useEffect(() => {
     if (id) {
