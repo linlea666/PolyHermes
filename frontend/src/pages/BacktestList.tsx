@@ -1,20 +1,19 @@
 import { useState, useEffect } from 'react'
-import { Table, Card, Button, Select, Tag, Space, Modal, message, Row, Col, Form, Input, InputNumber, Switch } from 'antd'
+import { Table, Card, Button, Select, Tag, Space, Modal, message, Row, Col, Form, Input, InputNumber, Switch, Statistic, Descriptions } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
 import { PlusOutlined, ReloadOutlined, DeleteOutlined, StopOutlined, EyeOutlined, RedoOutlined, CopyOutlined } from '@ant-design/icons'
 import { formatUSDC } from '../utils'
 import { backtestService, apiService } from '../services/api'
-import type { BacktestTaskDto, BacktestListRequest, BacktestCreateRequest } from '../types/backtest'
+import type { BacktestTaskDto, BacktestListRequest, BacktestCreateRequest, BacktestTradeDto } from '../types/backtest'
 import type { Leader } from '../types'
 import { useMediaQuery } from 'react-responsive'
 import AddCopyTradingModal from './CopyTradingOrders/AddModal'
+import BacktestChart from './BacktestChart'
 
 const { Option } = Select
 
 const BacktestList: React.FC = () => {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const isMobile = useMediaQuery({ maxWidth: 768 })
   const [loading, setLoading] = useState(false)
   const [tasks, setTasks] = useState<BacktestTaskDto[]>([])
@@ -36,6 +35,18 @@ const BacktestList: React.FC = () => {
   // 创建跟单配置 Modal
   const [addCopyTradingModalVisible, setAddCopyTradingModalVisible] = useState(false)
   const [preFilledConfig, setPreFilledConfig] = useState<any>(null)
+
+  // 任务详情 Modal 相关状态
+  const [detailModalVisible, setDetailModalVisible] = useState(false)
+  const [detailTask, setDetailTask] = useState<BacktestTaskDto | null>(null)
+  const [detailConfig, setDetailConfig] = useState<any>(null)
+  const [detailStatistics, setDetailStatistics] = useState<any>(null)
+  const [detailTrades, setDetailTrades] = useState<BacktestTradeDto[]>([])
+  const [detailAllTrades, setDetailAllTrades] = useState<BacktestTradeDto[]>([])
+  const [detailTradesLoading, setDetailTradesLoading] = useState(false)
+  const [detailTradesTotal, setDetailTradesTotal] = useState(0)
+  const [detailTradesPage, setDetailTradesPage] = useState(1)
+  const [detailTradesSize] = useState(20)
 
   // 获取回测任务列表
   const fetchTasks = async () => {
@@ -158,11 +169,6 @@ const BacktestList: React.FC = () => {
       fetchLeaders()
     }
   }, [createModalVisible])
-
-  // 查看详情
-  const handleViewDetail = (id: number) => {
-    navigate(`/backtest/detail/${id}`)
-  }
 
   // 打开创建 modal
   const handleCreate = () => {
@@ -292,6 +298,135 @@ const BacktestList: React.FC = () => {
       default: return status
     }
   }
+
+  // 获取交易记录
+  const fetchDetailTrades = async (taskId: number, page: number) => {
+    setDetailTradesLoading(true)
+    try {
+      const response = await backtestService.trades({
+        taskId,
+        page,
+        size: detailTradesSize
+      })
+      if (response.data.code === 0 && response.data.data) {
+        setDetailTrades(response.data.data.list)
+        setDetailTradesTotal(response.data.data.total)
+      }
+    } catch (error) {
+      console.error('Failed to fetch trades:', error)
+    } finally {
+      setDetailTradesLoading(false)
+    }
+  }
+
+  // 获取所有交易记录（用于图表显示）
+  const fetchDetailAllTrades = async (taskId: number) => {
+    try {
+      const response = await backtestService.trades({
+        taskId,
+        page: 1,
+        size: 10000  // 获取所有数据
+      })
+      if (response.data.code === 0 && response.data.data) {
+        setDetailAllTrades(response.data.data.list)
+      }
+    } catch (error) {
+      console.error('Failed to fetch all trades for chart:', error)
+    }
+  }
+
+  // 查看详情 - 打开 Modal 而不是跳转页面
+  const handleViewDetail = async (id: number) => {
+    try {
+      const response = await backtestService.detail({ id })
+      if (response.data.code === 0 && response.data.data) {
+        console.log('[BacktestList] Fetched task detail:', response.data.data)
+        console.log('[BacktestList] Statistics:', response.data.data.statistics)
+        setDetailTask(response.data.data.task)
+        setDetailConfig(response.data.data.config)
+        setDetailStatistics(response.data.data.statistics)
+        setDetailModalVisible(true)
+        // 获取交易记录
+        fetchDetailTrades(id, 1)
+        fetchDetailAllTrades(id)
+      } else {
+        message.error(response.data.msg || t('backtest.fetchTaskDetailFailed'))
+      }
+    } catch (error) {
+      console.error('Failed to fetch backtest task detail:', error)
+      message.error(t('backtest.fetchTaskDetailFailed'))
+    }
+  }
+
+  // 交易记录表格列定义
+  const tradeColumns = [
+    {
+      title: t('backtest.tradeTime'),
+      dataIndex: 'tradeTime',
+      key: 'tradeTime',
+      width: 180,
+      render: (timestamp: number) => new Date(timestamp).toLocaleString()
+    },
+    {
+      title: t('backtest.marketTitle'),
+      dataIndex: 'marketTitle',
+      key: 'marketTitle',
+      width: 250,
+      ellipsis: true
+    },
+    {
+      title: t('backtest.side'),
+      dataIndex: 'side',
+      key: 'side',
+      width: 100,
+      render: (side: string) => (
+        <Tag color={side === 'BUY' ? 'green' : side === 'SELL' ? 'orange' : 'blue'}>
+          {side === 'BUY' ? t('backtest.sideBuy') : side === 'SELL' ? t('backtest.sideSell') : t('backtest.sideSettlement')}
+        </Tag>
+      )
+    },
+    {
+      title: t('backtest.outcome'),
+      dataIndex: 'outcome',
+      key: 'outcome',
+      width: 100
+    },
+    {
+      title: t('backtest.quantity'),
+      dataIndex: 'quantity',
+      key: 'quantity',
+      width: 100,
+      render: (value: string) => parseFloat(value).toFixed(4)
+    },
+    {
+      title: t('backtest.price'),
+      dataIndex: 'price',
+      key: 'price',
+      width: 100,
+      render: (value: string) => parseFloat(value).toFixed(4)
+    },
+    {
+      title: t('backtest.amount') + ' (USDC)',
+      dataIndex: 'amount',
+      key: 'amount',
+      width: 120,
+      render: (value: string) => formatUSDC(value)
+    },
+    {
+      title: t('backtest.balanceAfter') + ' (USDC)',
+      dataIndex: 'balanceAfter',
+      key: 'balanceAfter',
+      width: 120,
+      render: (value: string) => formatUSDC(value)
+    },
+    {
+      title: t('backtest.leaderTradeId'),
+      dataIndex: 'leaderTradeId',
+      key: 'leaderTradeId',
+      width: 150,
+      ellipsis: true
+    }
+  ]
 
   const columns = [
     {
@@ -789,6 +924,260 @@ const BacktestList: React.FC = () => {
         }}
         preFilledConfig={preFilledConfig}
       />
+
+      {/* 任务详情 Modal */}
+      <Modal
+        title={t('backtest.taskDetail')}
+        open={detailModalVisible}
+        onCancel={() => {
+          setDetailModalVisible(false)
+          setDetailTask(null)
+          setDetailConfig(null)
+          setDetailStatistics(null)
+          setDetailTrades([])
+          setDetailAllTrades([])
+          setDetailTradesPage(1)
+          setDetailTradesTotal(0)
+        }}
+        footer={
+          detailTask && detailTask.status === 'COMPLETED' && detailConfig ? (
+            <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+              <Button type="primary" icon={<CopyOutlined />} onClick={() => {
+                const preFilled = {
+                  leaderId: detailTask.leaderId,
+                  copyMode: detailConfig.copyMode,
+                  copyRatio: detailConfig.copyMode === 'RATIO' ? parseFloat(detailConfig.copyRatio) * 100 : undefined,
+                  fixedAmount: detailConfig.copyMode === 'FIXED' ? detailConfig.fixedAmount : undefined,
+                  maxOrderSize: parseFloat(detailConfig.maxOrderSize),
+                  minOrderSize: parseFloat(detailConfig.minOrderSize),
+                  maxDailyLoss: parseFloat(detailConfig.maxDailyLoss),
+                  maxDailyOrders: detailConfig.maxDailyOrders,
+                  supportSell: detailConfig.supportSell,
+                  keywordFilterMode: detailConfig.keywordFilterMode,
+                  keywords: detailConfig.keywords || [],
+                  configName: `回测任务-${detailTask.taskName}`
+                }
+                setPreFilledConfig(preFilled)
+                setAddCopyTradingModalVisible(true)
+                setDetailModalVisible(false)
+              }}>
+                {t('backtest.createCopyTrading')}
+              </Button>
+            </Space>
+          ) : null
+        }
+        width={isMobile ? '95%' : '80%'}
+        style={{ top: isMobile ? 10 : 20 }}
+        styles={{
+          body: {
+            maxHeight: 'calc(100vh - 250px)',
+            overflowY: 'auto',
+            padding: '24px'
+          }
+        }}
+        destroyOnClose
+      >
+        {detailTask && (
+          <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            {/* 任务基本信息 */}
+            <Card title={t('backtest.taskDetail')} size="small">
+              <Descriptions column={isMobile ? 1 : 2} bordered size="small">
+                <Descriptions.Item label={t('backtest.taskName')}>{detailTask.taskName}</Descriptions.Item>
+                <Descriptions.Item label={t('backtest.leader')}>
+                  {detailTask.leaderName || detailTask.leaderAddress}
+                </Descriptions.Item>
+                <Descriptions.Item label={t('backtest.initialBalance')}>
+                  {formatUSDC(detailTask.initialBalance)} USDC
+                </Descriptions.Item>
+                <Descriptions.Item label={t('backtest.finalBalance')}>
+                  {detailTask.finalBalance ? formatUSDC(detailTask.finalBalance) + ' USDC' : '-'}
+                </Descriptions.Item>
+                <Descriptions.Item label={t('backtest.profitAmount')}>
+                  <span style={{ color: detailTask.profitAmount && parseFloat(detailTask.profitAmount) >= 0 ? '#52c41a' : '#ff4d4f' }}>
+                    {detailTask.profitAmount ? formatUSDC(detailTask.profitAmount) + ' USDC' : '-'}
+                  </span>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('backtest.profitRate')}>
+                  <span style={{ color: detailTask.profitRate && parseFloat(detailTask.profitRate) >= 0 ? '#52c41a' : '#ff4d4f' }}>
+                    {detailTask.profitRate ? detailTask.profitRate + '%' : '-'}
+                  </span>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('backtest.backtestDays')}>
+                  {detailTask.backtestDays} {t('common.day')}
+                </Descriptions.Item>
+                <Descriptions.Item label={t('backtest.status')}>
+                  <Tag color={getStatusColor(detailTask.status)}>{getStatusText(detailTask.status)}</Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label={t('backtest.progress')}>
+                  {detailTask.progress}%
+                </Descriptions.Item>
+                <Descriptions.Item label={t('backtest.totalTrades')}>
+                  {detailTask.totalTrades}
+                </Descriptions.Item>
+                <Descriptions.Item label={t('backtest.startTime')}>
+                  {new Date(detailTask.startTime).toLocaleString()}
+                </Descriptions.Item>
+                <Descriptions.Item label={t('backtest.endTime')}>
+                  {detailTask.endTime ? new Date(detailTask.endTime).toLocaleString() : '-'}
+                </Descriptions.Item>
+              </Descriptions>
+            </Card>
+
+            {/* 统计信息 */}
+            {detailStatistics && (
+              <Card title={t('backtest.statistics')} size="small">
+                <Row gutter={16}>
+                  <Col xs={24} sm={12} md={6}>
+                    <Statistic
+                      title={t('backtest.totalTrades')}
+                      value={detailStatistics.totalTrades || 0}
+                    />
+                  </Col>
+                  <Col xs={24} sm={12} md={6}>
+                    <Statistic
+                      title={t('backtest.buyTrades')}
+                      value={detailStatistics.buyTrades || 0}
+                    />
+                  </Col>
+                  <Col xs={24} sm={12} md={6}>
+                    <Statistic
+                      title={t('backtest.sellTrades')}
+                      value={detailStatistics.sellTrades}
+                    />
+                  </Col>
+                  <Col xs={24} sm={12} md={6}>
+                    <Statistic
+                      title={t('backtest.winTrades')}
+                      value={detailStatistics.winTrades}
+                      valueStyle={{ color: '#52c41a' }}
+                    />
+                  </Col>
+                  <Col xs={24} sm={12} md={6}>
+                    <Statistic
+                      title={t('backtest.lossTrades')}
+                      value={detailStatistics.lossTrades}
+                      valueStyle={{ color: '#ff4d4f' }}
+                    />
+                  </Col>
+                  <Col xs={24} sm={12} md={6}>
+                    <Statistic
+                      title={t('backtest.winRate')}
+                      value={detailStatistics.winRate || '0.00'}
+                      suffix="%"
+                      valueStyle={{ 
+                        color: detailStatistics.winRate && !isNaN(parseFloat(detailStatistics.winRate)) && parseFloat(detailStatistics.winRate) >= 50 ? '#52c41a' : '#ff4d4f' 
+                      }}
+                    />
+                  </Col>
+                  <Col xs={24} sm={12} md={6}>
+                    <Statistic
+                      title={t('backtest.maxProfit')}
+                      value={formatUSDC(detailStatistics.maxProfit)}
+                      valueStyle={{ color: '#52c41a' }}
+                    />
+                  </Col>
+                  <Col xs={24} sm={12} md={6}>
+                    <Statistic
+                      title={t('backtest.maxLoss')}
+                      value={formatUSDC(detailStatistics.maxLoss)}
+                      valueStyle={{ color: '#ff4d4f' }}
+                    />
+                  </Col>
+                  <Col xs={24} sm={12} md={6}>
+                    <Statistic
+                      title={t('backtest.maxDrawdown')}
+                      value={formatUSDC(detailStatistics.maxDrawdown)}
+                      valueStyle={{ color: '#ff4d4f' }}
+                    />
+                  </Col>
+                  {detailStatistics.avgHoldingTime && (
+                    <Col xs={24} sm={12} md={6}>
+                      <Statistic
+                        title={t('backtest.avgHoldingTime')}
+                        value={(detailStatistics.avgHoldingTime / 1000 / 60).toFixed(2)}
+                        suffix=" min"
+                      />
+                    </Col>
+                  )}
+                </Row>
+              </Card>
+            )}
+
+            {/* 配置信息 */}
+            {detailConfig && (
+              <Card title={t('backtest.config')} size="small">
+                <Descriptions column={isMobile ? 1 : 2} bordered size="small">
+                  <Descriptions.Item label={t('backtest.copyMode')}>
+                    {detailConfig.copyMode === 'RATIO' 
+                      ? `${t('backtest.copyModeRatio')} ${parseFloat(detailConfig.copyRatio) * 100}%`
+                      : `${t('backtest.copyModeFixed')} ${formatUSDC(detailConfig.fixedAmount)} USDC`
+                    }
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('backtest.maxOrderSize')}>
+                    {formatUSDC(detailConfig.maxOrderSize)} USDC
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('backtest.minOrderSize')}>
+                    {formatUSDC(detailConfig.minOrderSize)} USDC
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('backtest.maxDailyLoss')}>
+                    {formatUSDC(detailConfig.maxDailyLoss)} USDC
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('backtest.maxDailyOrders')}>
+                    {detailConfig.maxDailyOrders}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('backtest.supportSell')}>
+                    {detailConfig.supportSell ? t('common.yes') : t('common.no')}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('backtest.keywordFilterMode')}>
+                    {detailConfig.keywordFilterMode === 'WHITELIST'
+                      ? t('backtest.keywordFilterModeWhitelist')
+                      : detailConfig.keywordFilterMode === 'BLACKLIST'
+                        ? t('backtest.keywordFilterModeBlacklist')
+                        : t('backtest.keywordFilterModeDisabled')}
+                  </Descriptions.Item>
+                  {detailConfig.keywords && detailConfig.keywords.length > 0 && (
+                    <Descriptions.Item label={t('backtest.keywords')}>
+                      {detailConfig.keywords.join(', ')}
+                    </Descriptions.Item>
+                  )}
+                </Descriptions>
+              </Card>
+            )}
+
+            {/* 资金变化图表 */}
+            {detailAllTrades.length > 0 && (
+              <Card title={t('backtest.balanceChart')} size="small">
+                <BacktestChart trades={detailAllTrades} />
+              </Card>
+            )}
+
+            {/* 交易记录 */}
+            <Card title={t('backtest.tradeRecords')} size="small">
+              <Table
+                columns={tradeColumns}
+                dataSource={detailTrades}
+                rowKey="id"
+                loading={detailTradesLoading}
+                pagination={{
+                  current: detailTradesPage,
+                  pageSize: detailTradesSize,
+                  total: detailTradesTotal,
+                  showSizeChanger: false,
+                  showTotal: (total) => `${t('common.total')} ${total} ${t('common.items')}`,
+                  onChange: (newPage) => {
+                    setDetailTradesPage(newPage)
+                    if (detailTask) {
+                      fetchDetailTrades(detailTask.id, newPage)
+                    }
+                  }
+                }}
+                scroll={isMobile ? { x: 1200 } : { x: 1800 }}
+                size="small"
+              />
+            </Card>
+          </Space>
+        )}
+      </Modal>
     </div >
   )
 }

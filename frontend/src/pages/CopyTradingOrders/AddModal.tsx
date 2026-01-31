@@ -78,7 +78,7 @@ const AddModal: React.FC<AddModalProps> = ({
     })
     return `跟单配置-${dateStr}-${timeStr}`
   }
-
+  
   // 获取 Leader 资产信息
   const fetchLeaderAssetInfo = async (leaderId: number) => {
     if (!leaderId) return
@@ -149,7 +149,7 @@ const AddModal: React.FC<AddModalProps> = ({
       fetchAccounts()
       fetchLeaders()
       fetchTemplates()
-
+      
       // 如果有预填充配置，填充表单（延迟执行确保数据已加载）
       if (preFilledConfig) {
         console.log('[AddModal] preFilledConfig exists, will fill form after 100ms')
@@ -161,7 +161,7 @@ const AddModal: React.FC<AddModalProps> = ({
       } else {
         console.log('[AddModal] No preFilledConfig, using default values')
         // 没有预填充配置时，生成默认配置名
-        const defaultConfigName = generateDefaultConfigName()
+      const defaultConfigName = generateDefaultConfigName()
         form.setFieldsValue({
           configName: defaultConfigName,
           copyMode: 'RATIO',
@@ -174,7 +174,7 @@ const AddModal: React.FC<AddModalProps> = ({
           keywordFilterMode: 'DISABLED'
         })
         setCopyMode('RATIO')
-        setKeywords([])
+      setKeywords([])
       }
     } else {
       console.log('[AddModal] Modal closed, resetting form')
