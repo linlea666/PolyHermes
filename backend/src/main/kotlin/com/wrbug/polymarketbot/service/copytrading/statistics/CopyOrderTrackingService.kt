@@ -405,7 +405,7 @@ open class CopyOrderTrackingService(
                     }
 
                     // Polymarket 最小订单金额为 $1，需要确保 价格 × 数量 >= $1
-                    val tradePrice = trade.price.toSafeBigDecimal()
+                    // tradePrice 已在上面定义（第 276 行）
                     val orderAmount = buyQuantity.multi(tradePrice)
                     val polymarketMinOrderAmount = BigDecimal.ONE  // Polymarket 最小订单金额 $1
 
