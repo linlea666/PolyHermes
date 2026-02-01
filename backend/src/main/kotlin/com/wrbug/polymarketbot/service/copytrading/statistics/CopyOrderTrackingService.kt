@@ -879,7 +879,7 @@ open class CopyOrderTrackingService(
         }
 
         // 3. 计算需要匹配的数量
-        // 对于 FIXED 模式，需要根据实际买入比例计算；对于 RATIO 模式，使用配置的 copyRatio
+        // 对于 FIXED 模式，需要根据实际买入比例计算；对于 RATIO/FUND_RATIO 模式，使用配置的 copyRatio
         val needMatch = when (copyTrading.copyMode) {
             "FIXED" -> {
                 // 固定金额模式：根据未匹配订单的实际比例计算
@@ -893,6 +893,12 @@ open class CopyOrderTrackingService(
 
             "RATIO" -> {
                 // 比例模式：直接使用配置的 copyRatio（已经是倍数值，如 1.3 表示 130%）
+                leaderSellTrade.size.toSafeBigDecimal().multi(copyTrading.copyRatio)
+            }
+
+            "FUND_RATIO" -> {
+                // 资金比例模式：卖出时使用和 RATIO 相同的逻辑
+                // 因为买入时已经按资金比例计算了数量，卖出时按相同比例卖出即可
                 leaderSellTrade.size.toSafeBigDecimal().multi(copyTrading.copyRatio)
             }
 
@@ -970,9 +976,57 @@ open class CopyOrderTrackingService(
         // Polymarket 最小订单金额为 $1，检查 价格 × 数量 >= $1
         val sellOrderAmount = sellPrice.multi(totalMatched)
         val polymarketMinSellAmount = BigDecimal.ONE
+        
+        // 计算所有未匹配订单的总可卖数量
+        val totalAvailableQuantity = unmatchedOrders.sumOf { it.remainingQuantity.toSafeBigDecimal() }
+        
         if (sellOrderAmount.lt(polymarketMinSellAmount)) {
-            logger.warn("卖出订单金额 $sellOrderAmount 小于 Polymarket 最小订单金额 \$1，跳过卖出: copyTradingId=${copyTrading.id}, tradeId=${leaderSellTrade.id}, price=$sellPrice, quantity=$totalMatched")
-            return
+            // 计算满足最小订单金额所需的数量
+            val minQuantityForAmount = polymarketMinSellAmount.div(sellPrice, 8, java.math.RoundingMode.CEILING)
+            
+            if (minQuantityForAmount.lte(totalAvailableQuantity)) {
+                // 有足够持仓，提升卖出数量
+                logger.info("卖出订单金额 $sellOrderAmount 小于 Polymarket 最小订单金额 \$1，提升数量: copyTradingId=${copyTrading.id}, tradeId=${leaderSellTrade.id}, price=$sellPrice, originalQuantity=$totalMatched, adjustedQuantity=$minQuantityForAmount")
+                
+                // 重新计算匹配明细（使用调整后的数量）
+                matchDetails.clear()
+                var newTotalMatched = BigDecimal.ZERO
+                var newRemaining = minQuantityForAmount
+                
+                for (order in unmatchedOrders) {
+                    if (newRemaining.lte(BigDecimal.ZERO)) break
+                    
+                    val matchQty = minOf(
+                        order.remainingQuantity.toSafeBigDecimal(),
+                        newRemaining
+                    )
+                    
+                    if (matchQty.lte(BigDecimal.ZERO)) continue
+                    
+                    val buyPrice = order.price.toSafeBigDecimal()
+                    val realizedPnl = sellPrice.subtract(buyPrice).multi(matchQty)
+                    
+                    val detail = SellMatchDetail(
+                        matchRecordId = 0,
+                        trackingId = order.id!!,
+                        buyOrderId = order.buyOrderId,
+                        matchedQuantity = matchQty,
+                        buyPrice = buyPrice,
+                        sellPrice = sellPrice,
+                        realizedPnl = realizedPnl
+                    )
+                    matchDetails.add(detail)
+                    
+                    newTotalMatched = newTotalMatched.add(matchQty)
+                    newRemaining = newRemaining.subtract(matchQty)
+                }
+                
+                totalMatched = newTotalMatched
+            } else {
+                // 持仓不足以满足最小订单金额，跳过卖出
+                logger.warn("卖出订单金额 $sellOrderAmount 小于 Polymarket 最小订单金额 \$1，且持仓不足 (可用: $totalAvailableQuantity, 需要: $minQuantityForAmount)，跳过卖出: copyTradingId=${copyTrading.id}, tradeId=${leaderSellTrade.id}")
+                return
+            }
         }
 
         // 7. 解密 API 凭证
