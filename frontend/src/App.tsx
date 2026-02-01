@@ -34,6 +34,7 @@ import RpcNodeSettings from './pages/RpcNodeSettings'
 import Announcements from './pages/Announcements'
 import BacktestList from './pages/BacktestList'
 import BacktestDetail from './pages/BacktestDetail'
+import SmartTakeProfitSettings from './pages/SmartTakeProfitSettings'
 import { wsManager } from './services/websocket'
 import type { OrderPushMessage } from './types'
 import { apiService } from './services/api'
@@ -264,7 +265,9 @@ function App() {
           <Route path="/users" element={<ProtectedRoute><UserList /></ProtectedRoute>} />
           <Route path="/announcements" element={<ProtectedRoute><Announcements /></ProtectedRoute>} />
           <Route path="/system-settings" element={<ProtectedRoute><SystemSettings /></ProtectedRoute>} />
-          <Route path="/system-settings/rpc-nodes" element={<ProtectedRoute><RpcNodeSettings /></ProtectedRoute>} />          <Route path="/system-settings/api-health" element={<ProtectedRoute><ApiHealthStatus /></ProtectedRoute>} />
+          <Route path="/system-settings/rpc-nodes" element={<ProtectedRoute><RpcNodeSettings /></ProtectedRoute>} />
+          <Route path="/system-settings/api-health" element={<ProtectedRoute><ApiHealthStatus /></ProtectedRoute>} />
+          <Route path="/smart-take-profit" element={<ProtectedRoute><SmartTakeProfitSettings /></ProtectedRoute>} />
           
           {/* 默认重定向到登录页 */}
           <Route path="*" element={<Navigate to="/login" replace />} />

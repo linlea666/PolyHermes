@@ -718,6 +718,51 @@ export const apiService = {
           total?: number
         }
       }>>('/announcements/detail', data)
+  },
+
+  // ==================== 智能止盈止损 ====================
+  smartTakeProfit: {
+    /**
+     * 获取配置
+     */
+    getConfig: (data: { accountId: number }) =>
+      apiClient.post<ApiResponse<import('../types').SmartTakeProfitConfig | null>>('/smart-take-profit/config/get', data),
+    
+    /**
+     * 保存配置
+     */
+    saveConfig: (data: import('../types').SmartTakeProfitConfigRequest) =>
+      apiClient.post<ApiResponse<import('../types').SmartTakeProfitConfig>>('/smart-take-profit/config/save', data),
+    
+    /**
+     * 快速开启/关闭
+     */
+    toggle: (data: { accountId: number; enabled: boolean }) =>
+      apiClient.post<ApiResponse<boolean>>('/smart-take-profit/config/toggle', data),
+    
+    /**
+     * 删除配置
+     */
+    deleteConfig: (data: { accountId: number }) =>
+      apiClient.post<ApiResponse<boolean>>('/smart-take-profit/config/delete', data),
+    
+    /**
+     * 查询执行日志
+     */
+    getLogs: (data: { accountId?: number; marketId?: string; startTime?: number; endTime?: number; page?: number; size?: number }) =>
+      apiClient.post<ApiResponse<{
+        content: import('../types').SmartTakeProfitLog[]
+        totalElements: number
+        totalPages: number
+        number: number
+        size: number
+      }>>('/smart-take-profit/logs', data),
+    
+    /**
+     * 获取仓位风险评估
+     */
+    getRiskAssessment: (data: { accountId: number }) =>
+      apiClient.post<ApiResponse<import('../types').PositionRiskAssessment[]>>('/smart-take-profit/risk-assessment', data)
   }
 }
 

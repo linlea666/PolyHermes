@@ -162,6 +162,14 @@ enum class ErrorCode(
     STATISTICS_FETCH_FAILED(4801, "获取统计信息失败", "error.statistics_fetch_failed"),
     ORDER_LIST_FETCH_FAILED(4802, "查询订单列表失败", "error.order_list_fetch_failed"),
     
+    // 智能止盈止损相关 (4901-4999)
+    SMART_TP_CONFIG_NOT_FOUND(4901, "智能止盈止损配置不存在", "error.smart_tp_config_not_found"),
+    SMART_TP_CONFIG_SAVE_FAILED(4902, "保存智能止盈止损配置失败", "error.smart_tp_config_save_failed"),
+    SMART_TP_CONFIG_DELETE_FAILED(4903, "删除智能止盈止损配置失败", "error.smart_tp_config_delete_failed"),
+    SMART_TP_LOGS_FETCH_FAILED(4904, "获取智能止盈止损日志失败", "error.smart_tp_logs_fetch_failed"),
+    SMART_TP_RISK_ASSESSMENT_FAILED(4905, "获取风险评估失败", "error.smart_tp_risk_assessment_failed"),
+    SMART_TP_EXECUTION_FAILED(4906, "智能止盈止损执行失败", "error.smart_tp_execution_failed"),
+    
     // ==================== 服务器内部错误 (5001-5999) ====================
     SERVER_ERROR(5001, "服务器内部错误", "error.server.error"),
     SERVER_DATABASE_ERROR(5002, "数据库错误", "error.server.database_error"),

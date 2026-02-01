@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card, Table, Button, Space, Tag, Popconfirm, message, Typography, Spin, Modal, Descriptions, Divider, Form, Input, Alert } from 'antd'
-import { PlusOutlined, ReloadOutlined, EditOutlined, CopyOutlined } from '@ant-design/icons'
+import { PlusOutlined, ReloadOutlined, EditOutlined, CopyOutlined, SafetyOutlined } from '@ant-design/icons'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAccountStore } from '../store/accountStore'
 import type { Account } from '../types'
@@ -12,6 +13,7 @@ const { Title } = Typography
 
 const AccountList: React.FC = () => {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const isMobile = useMediaQuery({ maxWidth: 768 })
   const { accounts, loading, fetchAccounts, deleteAccount, fetchAccountBalance, fetchAccountDetail, updateAccount } = useAccountStore()
   const [balanceMap, setBalanceMap] = useState<Record<number, { total: string; available: string; position: string }>>({})
@@ -335,6 +337,14 @@ const AccountList: React.FC = () => {
             onClick={() => handleShowEdit(record)}
           >
             {t('accountList.edit')}
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<SafetyOutlined />}
+            onClick={() => navigate(`/smart-take-profit?accountId=${record.id}`)}
+          >
+            {t('accountList.smartTP')}
           </Button>
           <Popconfirm
             title={t('accountList.deleteConfirm')}

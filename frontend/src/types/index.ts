@@ -978,3 +978,139 @@ export interface NodeCheckResult {
   responseTimeMs?: number
   blockNumber?: string
 }
+
+// ==================== 智能止盈止损相关 ====================
+
+/**
+ * 智能止盈止损配置
+ */
+export interface SmartTakeProfitConfig {
+  id: number
+  accountId: number
+  accountName?: string
+  
+  // 基础配置
+  enabled: boolean
+  
+  // 止盈配置
+  takeProfitEnabled: boolean
+  takeProfitBaseThreshold: string
+  takeProfitRatio: string
+  takeProfitKeepRatio: string
+  
+  // 止损配置
+  stopLossEnabled: boolean
+  stopLossThreshold: string
+  stopLossRatio: string
+  
+  // 流动性动态调整
+  liquidityAdjustEnabled: boolean
+  liquidityDangerRatio: string
+  liquidityWarningRatio: string
+  liquiditySafeRatio: string
+  
+  // 时间衰减
+  timeDecayEnabled: boolean
+  timeDecayStartMinutes: number
+  timeDecayUrgentMinutes: number
+  timeDecayCriticalMinutes: number
+  
+  // 卖出执行策略
+  useLimitOrder: boolean
+  limitOrderPremium: string
+  limitOrderWaitSeconds: number
+  priceRetryEnabled: boolean
+  priceRetryStep: string
+  maxPriceSlippage: string
+  maxRetryCount: number
+  
+  createdAt: number
+  updatedAt: number
+}
+
+/**
+ * 智能止盈止损配置请求
+ */
+export interface SmartTakeProfitConfigRequest {
+  accountId: number
+  enabled?: boolean
+  
+  takeProfitEnabled?: boolean
+  takeProfitBaseThreshold?: string
+  takeProfitRatio?: string
+  takeProfitKeepRatio?: string
+  
+  stopLossEnabled?: boolean
+  stopLossThreshold?: string
+  stopLossRatio?: string
+  
+  liquidityAdjustEnabled?: boolean
+  liquidityDangerRatio?: string
+  liquidityWarningRatio?: string
+  liquiditySafeRatio?: string
+  
+  timeDecayEnabled?: boolean
+  timeDecayStartMinutes?: number
+  timeDecayUrgentMinutes?: number
+  timeDecayCriticalMinutes?: number
+  
+  useLimitOrder?: boolean
+  limitOrderPremium?: string
+  limitOrderWaitSeconds?: number
+  priceRetryEnabled?: boolean
+  priceRetryStep?: string
+  maxPriceSlippage?: string
+  maxRetryCount?: number
+}
+
+/**
+ * 智能止盈止损执行日志
+ */
+export interface SmartTakeProfitLog {
+  id: number
+  configId: number
+  accountId: number
+  marketId: string
+  marketTitle?: string
+  outcome: string
+  outcomeIndex?: number
+  triggerType: string
+  triggerPnlPercent: string
+  dynamicThreshold?: string
+  liquidityCoef?: string
+  timeCoef?: string
+  urgencyLevel?: string
+  orderbookBidDepth?: string
+  positionValue?: string
+  remainingMinutes?: number
+  soldQuantity: string
+  soldPrice: string
+  soldAmount: string
+  orderType: string
+  orderId?: string
+  status: string
+  retryCount: number
+  errorMessage?: string
+  createdAt: number
+}
+
+/**
+ * 仓位风险评估
+ */
+export interface PositionRiskAssessment {
+  accountId: number
+  marketId: string
+  outcome: string
+  outcomeIndex?: number
+  positionValue: string
+  orderbookBidDepth: string
+  liquidityRatio: string
+  liquidityLevel: 'SAFE' | 'WARNING' | 'DANGER' | 'CRITICAL' | 'UNKNOWN'
+  marketEndDate?: number
+  remainingMinutes?: number
+  timeLevel: 'SAFE' | 'WARNING' | 'URGENT' | 'CRITICAL' | 'UNKNOWN'
+  overallRisk: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'UNKNOWN'
+  currentPnlPercent: string
+  dynamicThreshold?: string
+  wouldTrigger: boolean
+}
