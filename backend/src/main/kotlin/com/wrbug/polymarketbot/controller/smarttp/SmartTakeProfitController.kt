@@ -32,13 +32,13 @@ class SmartTakeProfitController(
     ): ResponseEntity<ApiResponse<SmartTakeProfitConfigResponse?>> {
         return try {
             val accountId = request["accountId"] 
-                ?: return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, messageSource))
+                ?: return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, messageSource = messageSource))
             
             val config = smartTakeProfitService.getConfig(accountId)
             ResponseEntity.ok(ApiResponse.success(config))
         } catch (e: Exception) {
             logger.error("获取智能止盈止损配置失败: ${e.message}", e)
-            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ERROR, messageSource))
+            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ERROR, messageSource = messageSource))
         }
     }
     
@@ -51,14 +51,14 @@ class SmartTakeProfitController(
     ): ResponseEntity<ApiResponse<SmartTakeProfitConfigResponse>> {
         return try {
             if (request.accountId <= 0) {
-                return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, messageSource))
+                return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, messageSource = messageSource))
             }
             
             val config = smartTakeProfitService.saveConfig(request)
             ResponseEntity.ok(ApiResponse.success(config))
         } catch (e: Exception) {
             logger.error("保存智能止盈止损配置失败: ${e.message}", e)
-            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ERROR, messageSource))
+            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ERROR, messageSource = messageSource))
         }
     }
     
@@ -71,14 +71,14 @@ class SmartTakeProfitController(
     ): ResponseEntity<ApiResponse<Boolean>> {
         return try {
             if (request.accountId <= 0) {
-                return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, messageSource))
+                return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, messageSource = messageSource))
             }
             
             val enabled = smartTakeProfitService.toggleEnabled(request)
             ResponseEntity.ok(ApiResponse.success(enabled))
         } catch (e: Exception) {
             logger.error("切换智能止盈止损状态失败: ${e.message}", e)
-            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ERROR, messageSource))
+            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ERROR, messageSource = messageSource))
         }
     }
     
@@ -91,13 +91,13 @@ class SmartTakeProfitController(
     ): ResponseEntity<ApiResponse<Boolean>> {
         return try {
             val accountId = request["accountId"]
-                ?: return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, messageSource))
+                ?: return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, messageSource = messageSource))
             
             smartTakeProfitService.deleteConfig(accountId)
             ResponseEntity.ok(ApiResponse.success(true))
         } catch (e: Exception) {
             logger.error("删除智能止盈止损配置失败: ${e.message}", e)
-            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ERROR, messageSource))
+            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ERROR, messageSource = messageSource))
         }
     }
     
@@ -113,7 +113,7 @@ class SmartTakeProfitController(
             ResponseEntity.ok(ApiResponse.success(logs))
         } catch (e: Exception) {
             logger.error("查询智能止盈止损日志失败: ${e.message}", e)
-            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ERROR, messageSource))
+            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ERROR, messageSource = messageSource))
         }
     }
     
@@ -126,7 +126,7 @@ class SmartTakeProfitController(
     ): ResponseEntity<ApiResponse<List<PositionRiskAssessment>>> {
         return try {
             if (request.accountId <= 0) {
-                return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, messageSource))
+                return ResponseEntity.ok(ApiResponse.error(ErrorCode.PARAM_EMPTY, messageSource = messageSource))
             }
             
             val assessments = runBlocking {
@@ -135,7 +135,7 @@ class SmartTakeProfitController(
             ResponseEntity.ok(ApiResponse.success(assessments))
         } catch (e: Exception) {
             logger.error("获取仓位风险评估失败: ${e.message}", e)
-            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ERROR, messageSource))
+            ResponseEntity.ok(ApiResponse.error(ErrorCode.SERVER_ERROR, messageSource = messageSource))
         }
     }
 }
