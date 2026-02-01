@@ -93,7 +93,7 @@ data class PendingLimitOrder(
     
     /** 过期时间（超过此时间未成交则降价重试或取消） */
     @Column(name = "expire_at", nullable = false)
-    val expireAt: Long,
+    var expireAt: Long,
     
     /** 最后更新时间 */
     @Column(name = "updated_at", nullable = false)

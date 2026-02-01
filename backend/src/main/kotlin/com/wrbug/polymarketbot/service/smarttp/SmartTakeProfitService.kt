@@ -6,7 +6,7 @@ import com.wrbug.polymarketbot.repository.*
 import com.wrbug.polymarketbot.service.accounts.AccountService
 import com.wrbug.polymarketbot.service.common.BlockchainService
 import com.wrbug.polymarketbot.service.common.PolymarketClobService
-import com.wrbug.polymarketbot.service.market.MarketService
+import com.wrbug.polymarketbot.service.common.MarketService
 import com.wrbug.polymarketbot.util.toSafeBigDecimal
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory

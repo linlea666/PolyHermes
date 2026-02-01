@@ -1,9 +1,8 @@
 package com.wrbug.polymarketbot.controller.smarttp
 
 import com.wrbug.polymarketbot.dto.*
+import com.wrbug.polymarketbot.enums.ErrorCode
 import com.wrbug.polymarketbot.service.smarttp.SmartTakeProfitService
-import com.wrbug.polymarketbot.util.ApiResponse
-import com.wrbug.polymarketbot.util.ErrorCode
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import org.springframework.context.MessageSource
