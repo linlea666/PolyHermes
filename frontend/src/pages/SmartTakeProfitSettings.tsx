@@ -172,6 +172,27 @@ const SmartTakeProfitSettings: React.FC = () => {
     }
   }
   
+  /**
+   * 安全转换为字符串，处理 undefined/null 情况
+   */
+  const safeString = (value: unknown, defaultValue: string): string => {
+    if (value === undefined || value === null || value === '') {
+      return defaultValue
+    }
+    return String(value)
+  }
+
+  /**
+   * 安全转换为数字，处理 undefined/null 情况
+   */
+  const safeNumber = (value: unknown, defaultValue: number): number => {
+    if (value === undefined || value === null || value === '') {
+      return defaultValue
+    }
+    const num = Number(value)
+    return isNaN(num) ? defaultValue : num
+  }
+
   const handleSave = async (values: Record<string, unknown>) => {
     if (!accountId) return
     
@@ -179,29 +200,29 @@ const SmartTakeProfitSettings: React.FC = () => {
     try {
       const response = await apiService.smartTakeProfit.saveConfig({
         accountId: Number(accountId),
-        enabled: values.enabled as boolean,
-        takeProfitEnabled: values.takeProfitEnabled as boolean,
-        takeProfitBaseThreshold: String(values.takeProfitBaseThreshold),
-        takeProfitRatio: String(values.takeProfitRatio),
-        takeProfitKeepRatio: String(values.takeProfitKeepRatio),
-        stopLossEnabled: values.stopLossEnabled as boolean,
-        stopLossThreshold: String(values.stopLossThreshold),
-        stopLossRatio: String(values.stopLossRatio),
-        liquidityAdjustEnabled: values.liquidityAdjustEnabled as boolean,
-        liquidityDangerRatio: String(values.liquidityDangerRatio),
-        liquidityWarningRatio: String(values.liquidityWarningRatio),
-        liquiditySafeRatio: String(values.liquiditySafeRatio),
-        timeDecayEnabled: values.timeDecayEnabled as boolean,
-        timeDecayStartMinutes: values.timeDecayStartMinutes as number,
-        timeDecayUrgentMinutes: values.timeDecayUrgentMinutes as number,
-        timeDecayCriticalMinutes: values.timeDecayCriticalMinutes as number,
-        useLimitOrder: values.useLimitOrder as boolean,
-        limitOrderPremium: String(values.limitOrderPremium),
-        limitOrderWaitSeconds: values.limitOrderWaitSeconds as number,
-        priceRetryEnabled: values.priceRetryEnabled as boolean,
-        priceRetryStep: String(values.priceRetryStep),
-        maxPriceSlippage: String(values.maxPriceSlippage),
-        maxRetryCount: values.maxRetryCount as number
+        enabled: Boolean(values.enabled),
+        takeProfitEnabled: Boolean(values.takeProfitEnabled),
+        takeProfitBaseThreshold: safeString(values.takeProfitBaseThreshold, '10'),
+        takeProfitRatio: safeString(values.takeProfitRatio, '30'),
+        takeProfitKeepRatio: safeString(values.takeProfitKeepRatio, '20'),
+        stopLossEnabled: Boolean(values.stopLossEnabled),
+        stopLossThreshold: safeString(values.stopLossThreshold, '-20'),
+        stopLossRatio: safeString(values.stopLossRatio, '100'),
+        liquidityAdjustEnabled: Boolean(values.liquidityAdjustEnabled),
+        liquidityDangerRatio: safeString(values.liquidityDangerRatio, '0.3'),
+        liquidityWarningRatio: safeString(values.liquidityWarningRatio, '1.0'),
+        liquiditySafeRatio: safeString(values.liquiditySafeRatio, '3.0'),
+        timeDecayEnabled: Boolean(values.timeDecayEnabled),
+        timeDecayStartMinutes: safeNumber(values.timeDecayStartMinutes, 30),
+        timeDecayUrgentMinutes: safeNumber(values.timeDecayUrgentMinutes, 5),
+        timeDecayCriticalMinutes: safeNumber(values.timeDecayCriticalMinutes, 2),
+        useLimitOrder: Boolean(values.useLimitOrder),
+        limitOrderPremium: safeString(values.limitOrderPremium, '1'),
+        limitOrderWaitSeconds: safeNumber(values.limitOrderWaitSeconds, 60),
+        priceRetryEnabled: Boolean(values.priceRetryEnabled),
+        priceRetryStep: safeString(values.priceRetryStep, '1'),
+        maxPriceSlippage: safeString(values.maxPriceSlippage, '5'),
+        maxRetryCount: safeNumber(values.maxRetryCount, 3)
       })
       
       if (response.data.code === 0) {
