@@ -12,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -44,13 +45,15 @@ class SmartTakeProfitService(
 ) {
     private val logger = LoggerFactory.getLogger(SmartTakeProfitService::class.java)
     
+    /** 检查间隔（毫秒），可通过 smart-take-profit.check-interval-ms 配置 */
+    @Value("\${smart-take-profit.check-interval-ms:30000}")
+    private var checkIntervalMs: Long = 30000L
+    
+    /** 冷却时间（毫秒），可通过 smart-take-profit.cooldown-ms 配置 */
+    @Value("\${smart-take-profit.cooldown-ms:300000}")
+    private var cooldownMs: Long = 300000L
+    
     companion object {
-        // 检查间隔（毫秒）
-        private const val CHECK_INTERVAL_MS = 30000L
-        
-        // 避免重复执行的冷却时间（毫秒）
-        private const val COOLDOWN_MS = 300000L  // 5分钟
-        
         // 流动性系数常量
         private val LIQUIDITY_COEF_SAFE = BigDecimal("1.5")      // 流动性充足：可等待
         private val LIQUIDITY_COEF_NORMAL = BigDecimal("1.0")    // 流动性正常
@@ -229,9 +232,9 @@ class SmartTakeProfitService(
     
     /**
      * 定时检查所有启用的配置，执行止盈止损
-     * 每30秒执行一次
+     * 检查间隔可通过 smart-take-profit.check-interval-ms 配置，默认30秒
      */
-    @Scheduled(fixedDelay = CHECK_INTERVAL_MS)
+    @Scheduled(fixedDelayString = "\${smart-take-profit.check-interval-ms:30000}")
     fun checkAndExecute() {
         try {
             // 1. 查询所有启用的配置
@@ -302,7 +305,7 @@ class SmartTakeProfitService(
             config.accountId,
             position.marketId,
             position.side,
-            System.currentTimeMillis() - COOLDOWN_MS
+            System.currentTimeMillis() - cooldownMs
         )
         if (recentLogs.isNotEmpty()) {
             logger.debug(
