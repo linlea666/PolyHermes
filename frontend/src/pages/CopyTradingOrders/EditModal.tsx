@@ -26,7 +26,7 @@ const EditModal: React.FC<EditModalProps> = ({
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
   const [copyTrading, setCopyTrading] = useState<CopyTrading | null>(null)
-  const [copyMode, setCopyMode] = useState<'RATIO' | 'FIXED'>('RATIO')
+  const [copyMode, setCopyMode] = useState<'RATIO' | 'FIXED' | 'FUND_RATIO'>('RATIO')
     const [originalEnabled, setOriginalEnabled] = useState<boolean>(true)
     const [keywords, setKeywords] = useState<string[]>([])
     const keywordInputRef = useRef<InputRef>(null)
@@ -117,7 +117,7 @@ const EditModal: React.FC<EditModalProps> = ({
     }
   }
   
-  const handleCopyModeChange = (mode: 'RATIO' | 'FIXED') => {
+  const handleCopyModeChange = (mode: 'RATIO' | 'FIXED' | 'FUND_RATIO') => {
     setCopyMode(mode)
   }
   
@@ -489,12 +489,14 @@ const EditModal: React.FC<EditModalProps> = ({
             </Form.Item>
           )}
           
-          {copyMode === 'RATIO' && (
+          {(copyMode === 'RATIO' || copyMode === 'FUND_RATIO') && (
             <>
               <Form.Item
                 label={t('copyTradingEdit.maxOrderSize') || '单笔订单最大金额 (USDC)'}
                 name="maxOrderSize"
-                tooltip={t('copyTradingEdit.maxOrderSizeTooltip') || '比例模式下，限制单笔跟单订单的最大金额上限'}
+                tooltip={copyMode === 'FUND_RATIO'
+                  ? (t('copyTradingEdit.fundMaxOrderSizeTooltip') || '限制单笔跟单订单的最大金额上限')
+                  : (t('copyTradingEdit.maxOrderSizeTooltip') || '比例模式下，限制单笔跟单订单的最大金额上限')}
               >
                 <InputNumber
                   min={0.0001}
@@ -512,9 +514,13 @@ const EditModal: React.FC<EditModalProps> = ({
               </Form.Item>
               
               <Form.Item
-                label={t('copyTradingEdit.minOrderSize') || '单笔订单最小金额 (USDC)'}
+                label={copyMode === 'FUND_RATIO'
+                  ? (t('copyTradingEdit.minCopyAmount') || '最小跟单金额 (USDC)')
+                  : (t('copyTradingEdit.minOrderSize') || '单笔订单最小金额 (USDC)')}
                 name="minOrderSize"
-                tooltip={t('copyTradingEdit.minOrderSizeTooltip') || '比例模式下，限制单笔跟单订单的最小金额下限，必须 >= 1'}
+                tooltip={copyMode === 'FUND_RATIO'
+                  ? (t('copyTradingEdit.minCopyAmountTooltip') || '计算出的跟单金额低于此值时，自动提升到此值')
+                  : (t('copyTradingEdit.minOrderSizeTooltip') || '比例模式下，限制单笔跟单订单的最小金额下限，必须 >= 1')}
                 rules={[
                   { 
                     validator: (_, value) => {
