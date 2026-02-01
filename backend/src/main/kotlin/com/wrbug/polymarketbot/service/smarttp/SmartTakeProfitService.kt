@@ -90,33 +90,33 @@ class SmartTakeProfitService(
         val existingConfig = configRepository.findByAccountId(request.accountId)
         
         val config = if (existingConfig != null) {
-            // 更新现有配置
-            existingConfig.copy(
-                enabled = request.enabled,
-                takeProfitEnabled = request.takeProfitEnabled,
-                takeProfitBaseThreshold = request.takeProfitBaseThreshold,
-                takeProfitRatio = request.takeProfitRatio,
-                takeProfitKeepRatio = request.takeProfitKeepRatio,
-                stopLossEnabled = request.stopLossEnabled,
-                stopLossThreshold = request.stopLossThreshold,
-                stopLossRatio = request.stopLossRatio,
-                liquidityAdjustEnabled = request.liquidityAdjustEnabled,
-                liquidityDangerRatio = request.liquidityDangerRatio,
-                liquidityWarningRatio = request.liquidityWarningRatio,
-                liquiditySafeRatio = request.liquiditySafeRatio,
-                timeDecayEnabled = request.timeDecayEnabled,
-                timeDecayStartMinutes = request.timeDecayStartMinutes,
-                timeDecayUrgentMinutes = request.timeDecayUrgentMinutes,
-                timeDecayCriticalMinutes = request.timeDecayCriticalMinutes,
-                useLimitOrder = request.useLimitOrder,
-                limitOrderPremium = request.limitOrderPremium,
-                limitOrderWaitSeconds = request.limitOrderWaitSeconds,
-                priceRetryEnabled = request.priceRetryEnabled,
-                priceRetryStep = request.priceRetryStep,
-                maxPriceSlippage = request.maxPriceSlippage,
-                maxRetryCount = request.maxRetryCount,
+            // 更新现有配置（直接修改 managed 实体，利用 JPA 脏检查自动更新）
+            existingConfig.apply {
+                enabled = request.enabled
+                takeProfitEnabled = request.takeProfitEnabled
+                takeProfitBaseThreshold = request.takeProfitBaseThreshold
+                takeProfitRatio = request.takeProfitRatio
+                takeProfitKeepRatio = request.takeProfitKeepRatio
+                stopLossEnabled = request.stopLossEnabled
+                stopLossThreshold = request.stopLossThreshold
+                stopLossRatio = request.stopLossRatio
+                liquidityAdjustEnabled = request.liquidityAdjustEnabled
+                liquidityDangerRatio = request.liquidityDangerRatio
+                liquidityWarningRatio = request.liquidityWarningRatio
+                liquiditySafeRatio = request.liquiditySafeRatio
+                timeDecayEnabled = request.timeDecayEnabled
+                timeDecayStartMinutes = request.timeDecayStartMinutes
+                timeDecayUrgentMinutes = request.timeDecayUrgentMinutes
+                timeDecayCriticalMinutes = request.timeDecayCriticalMinutes
+                useLimitOrder = request.useLimitOrder
+                limitOrderPremium = request.limitOrderPremium
+                limitOrderWaitSeconds = request.limitOrderWaitSeconds
+                priceRetryEnabled = request.priceRetryEnabled
+                priceRetryStep = request.priceRetryStep
+                maxPriceSlippage = request.maxPriceSlippage
+                maxRetryCount = request.maxRetryCount
                 updatedAt = System.currentTimeMillis()
-            )
+            }
         } else {
             // 创建新配置
             SmartTakeProfitConfig(
@@ -163,11 +163,10 @@ class SmartTakeProfitService(
         val config = configRepository.findByAccountId(request.accountId)
         
         if (config != null) {
-            val updatedConfig = config.copy(
-                enabled = request.enabled,
-                updatedAt = System.currentTimeMillis()
-            )
-            configRepository.save(updatedConfig)
+            // 直接修改 managed 实体，利用 JPA 脏检查自动更新
+            config.enabled = request.enabled
+            config.updatedAt = System.currentTimeMillis()
+            configRepository.save(config)
         } else if (request.enabled) {
             // 如果配置不存在且要启用，创建默认配置
             val newConfig = SmartTakeProfitConfig(
