@@ -415,9 +415,9 @@ open class CopyOrderTrackingService(
                         logger.warn("订单金额 $orderAmount 小于 Polymarket 最小订单金额 \$1，调整数量: copyTradingId=${copyTrading.id}, tradeId=${trade.id}, price=$tradePrice, originalQuantity=$buyQuantity, adjustedQuantity=$minQuantityForAmount")
                         buyQuantity = minQuantityForAmount
                     }
-                    // 验证订单数量限制（仅比例模式）
+                    // 验证订单数量限制（比例模式和资金比例模式）
                     var finalBuyQuantity = buyQuantity
-                    if (copyTrading.copyMode == "RATIO") {
+                    if (copyTrading.copyMode == "RATIO" || copyTrading.copyMode == "FUND_RATIO") {
                         // tradePrice 已在上面定义
                         val rawOrderAmount = buyQuantity.multi(tradePrice)
 
