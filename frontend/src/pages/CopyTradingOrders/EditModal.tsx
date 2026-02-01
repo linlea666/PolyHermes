@@ -392,14 +392,34 @@ const EditModal: React.FC<EditModalProps> = ({
             <Radio.Group onChange={(e) => handleCopyModeChange(e.target.value)}>
               <Radio value="RATIO">{t('copyTradingEdit.ratioMode') || '比例模式'}</Radio>
               <Radio value="FIXED">{t('copyTradingEdit.fixedAmountMode') || '固定金额模式'}</Radio>
+              <Radio value="FUND_RATIO">{t('copyTradingEdit.fundRatioMode') || '资金比例模式'}</Radio>
             </Radio.Group>
           </Form.Item>
           
-          {copyMode === 'RATIO' && (
+          {/* 资金比例模式说明 */}
+          {copyMode === 'FUND_RATIO' && (
+            <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#e6f7ff', borderRadius: '4px', border: '1px solid #91d5ff' }}>
+              <div style={{ marginBottom: '8px', fontWeight: 500 }}>
+                {t('copyTradingEdit.fundRatioHelp') || '💡 资金比例模式说明'}
+              </div>
+              <div style={{ fontSize: '13px', color: '#666' }}>
+                {t('copyTradingEdit.fundRatioDesc') || '跟单金额 = 跟单比例 × (Leader开仓金额 / Leader总余额) × 你的可用余额'}
+              </div>
+              <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
+                {t('copyTradingEdit.fundRatioExample') || '例如：Leader 余额 1000 USDC，开仓 100 USDC（10%），你的余额 100 USDC，跟单比例 100%，则你跟单 10 USDC'}
+              </div>
+            </div>
+          )}
+          
+          {(copyMode === 'RATIO' || copyMode === 'FUND_RATIO') && (
             <Form.Item
-              label={t('copyTradingEdit.copyRatio') || '跟单比例'}
+              label={copyMode === 'FUND_RATIO'
+                ? (t('copyTradingEdit.fundCopyRatio') || '跟单比例')
+                : (t('copyTradingEdit.copyRatio') || '跟单比例')}
               name="copyRatio"
-              tooltip={t('copyTradingEdit.copyRatioTooltip') || '跟单比例表示跟单金额相对于 Leader 订单金额的百分比'}
+              tooltip={copyMode === 'FUND_RATIO'
+                ? (t('copyTradingEdit.fundCopyRatioTooltip') || '100% 表示完全复制 Leader 的仓位占比，200% 表示 2 倍')
+                : (t('copyTradingEdit.copyRatioTooltip') || '跟单比例表示跟单金额相对于 Leader 订单金额的百分比')}
             >
               <InputNumber
                 min={0.01}

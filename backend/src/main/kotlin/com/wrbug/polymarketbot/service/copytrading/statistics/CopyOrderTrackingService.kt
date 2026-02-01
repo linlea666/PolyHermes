@@ -708,8 +708,13 @@ open class CopyOrderTrackingService(
     /**
      * 计算买入数量
      * 根据模板的copyMode计算
+     * 
+     * 支持三种模式：
+     * - RATIO: 比例模式，跟单数量 = Leader数量 × 比例倍数
+     * - FIXED: 固定金额模式，跟单数量 = 固定金额 / 买入价格
+     * - FUND_RATIO: 资金比例模式，跟单金额 = 跟单比例 × (Leader开仓金额/Leader总余额) × 跟单员可用余额
      */
-    private fun calculateBuyQuantity(trade: TradeResponse, copyTrading: CopyTrading): BigDecimal {
+    private suspend fun calculateBuyQuantity(trade: TradeResponse, copyTrading: CopyTrading): BigDecimal {
         return when (copyTrading.copyMode) {
             "RATIO" -> {
                 // 比例模式：Leader 数量 × 比例倍数（copyRatio 已经是倍数值，如 1.3 表示 130%）
@@ -724,8 +729,88 @@ open class CopyOrderTrackingService(
                 fixedAmount.div(buyPrice)
             }
 
+            "FUND_RATIO" -> {
+                // 资金比例模式：跟单金额 = 跟单比例 × (Leader开仓金额 / Leader总余额) × 跟单员可用余额
+                calculateBuyQuantityForFundRatio(trade, copyTrading)
+            }
+
             else -> throw IllegalArgumentException("不支持的 copyMode: ${copyTrading.copyMode}")
         }
+    }
+
+    /**
+     * 资金比例模式计算买入数量
+     * 
+     * 公式：跟单金额 = copyRatio × (leaderOrderAmount / leaderBalance) × followerBalance
+     * 
+     * 这是行业标准的智能跟单模式，确保：
+     * 1. 风险与资金匹配，不会因资金差距导致仓位过重
+     * 2. 仓位结构完全一致，盈亏曲线同步
+     * 3. 小资金也能安全跟大户
+     * 
+     * 例如：Leader 余额 1000 USDC，开仓 100 USDC（10%），
+     * 你的余额 100 USDC，跟单比例 100%，则你跟单 10 USDC
+     */
+    private suspend fun calculateBuyQuantityForFundRatio(
+        trade: TradeResponse,
+        copyTrading: CopyTrading
+    ): BigDecimal {
+        // 1. 获取 Leader 余额
+        val leader = leaderRepository.findById(copyTrading.leaderId).orElse(null)
+            ?: throw IllegalStateException("Leader 不存在: leaderId=${copyTrading.leaderId}")
+        
+        val leaderBalanceResult = blockchainService.getWalletBalance(leader.leaderAddress)
+        if (leaderBalanceResult.isFailure) {
+            throw IllegalStateException("获取 Leader 余额失败: ${leaderBalanceResult.exceptionOrNull()?.message}")
+        }
+        val leaderBalance = leaderBalanceResult.getOrNull()?.totalBalance?.toSafeBigDecimal()
+            ?: throw IllegalStateException("获取 Leader 余额返回空值")
+        
+        if (leaderBalance.lte(BigDecimal.ZERO)) {
+            logger.warn("Leader 余额为 0，跳过跟单: leaderId=${copyTrading.leaderId}")
+            return BigDecimal.ZERO
+        }
+        
+        // 2. 获取跟单员可用余额
+        val account = accountRepository.findById(copyTrading.accountId).orElse(null)
+            ?: throw IllegalStateException("账户不存在: accountId=${copyTrading.accountId}")
+        
+        val followerBalanceResult = blockchainService.getWalletBalance(account.proxyAddress)
+        if (followerBalanceResult.isFailure) {
+            throw IllegalStateException("获取跟单员余额失败: ${followerBalanceResult.exceptionOrNull()?.message}")
+        }
+        val followerBalance = followerBalanceResult.getOrNull()?.availableBalance?.toSafeBigDecimal()
+            ?: throw IllegalStateException("获取跟单员余额返回空值")
+        
+        if (followerBalance.lte(BigDecimal.ZERO)) {
+            logger.warn("跟单员余额为 0，跳过跟单: accountId=${copyTrading.accountId}")
+            return BigDecimal.ZERO
+        }
+        
+        // 3. 计算跟单金额
+        // Leader 开仓金额 = 价格 × 数量
+        val leaderOrderAmount = trade.price.toSafeBigDecimal().multi(trade.size.toSafeBigDecimal())
+        // Leader 仓位占比 = 开仓金额 / 总余额
+        val positionRatio = leaderOrderAmount.div(leaderBalance)
+        // 跟单金额 = 跟单比例 × 仓位占比 × 跟单员可用余额
+        val copyAmount = copyTrading.copyRatio.multi(positionRatio).multi(followerBalance)
+        
+        logger.debug(
+            "FUND_RATIO 计算: leaderBalance=$leaderBalance, followerBalance=$followerBalance, " +
+            "leaderOrderAmount=$leaderOrderAmount, positionRatio=$positionRatio, copyAmount=$copyAmount"
+        )
+        
+        // 4. 如果低于 minOrderSize，提升到 minOrderSize（这是 FUND_RATIO 模式的特殊处理）
+        val finalAmount = if (copyAmount.lt(copyTrading.minOrderSize) && copyAmount.gt(BigDecimal.ZERO)) {
+            logger.debug("跟单金额 $copyAmount 低于最小值 ${copyTrading.minOrderSize}，提升到最小值")
+            copyTrading.minOrderSize
+        } else {
+            copyAmount
+        }
+        
+        // 5. 转换为买入数量 = 跟单金额 / 买入价格
+        val buyPrice = trade.price.toSafeBigDecimal()
+        return finalAmount.div(buyPrice)
     }
 
     /**
