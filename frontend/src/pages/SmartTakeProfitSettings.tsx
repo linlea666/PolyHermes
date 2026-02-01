@@ -10,12 +10,10 @@ import {
   message,
   Spin,
   Typography,
-  Divider,
   Tooltip,
   Collapse,
   Table,
-  Tag,
-  Progress
+  Tag
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -43,7 +41,7 @@ const SmartTakeProfitSettings: React.FC = () => {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [config, setConfig] = useState<SmartTakeProfitConfig | null>(null)
+  const [, setConfig] = useState<SmartTakeProfitConfig | null>(null)
   const [logs, setLogs] = useState<SmartTakeProfitLog[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
   const [riskAssessments, setRiskAssessments] = useState<PositionRiskAssessment[]>([])
