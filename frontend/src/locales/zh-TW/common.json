@@ -1406,6 +1406,15 @@
     "liquidityDangerRatioTip": "當訂單簿深度 < 持倉價值 × 此值時，立即觸發止盈",
     "liquidityWarningRatio": "流動性警告閾值",
     "liquiditySafeRatio": "流動性安全閾值",
+    "absoluteLiquidityTitle": "絕對流動性檢查（按市場深度）",
+    "absoluteLiquidityDesc": "當市場買盤深度低於設定閾值時觸發強制賣出，不受持倉大小影響。適合過濾低流動性市場。",
+    "liquidityAbsoluteEnabled": "啟用絕對流動性檢查",
+    "liquidityAbsoluteDanger": "絕對流動性危險閾值",
+    "liquidityAbsoluteDangerTip": "當市場買盤深度低於此值時，立即觸發強制賣出",
+    "liquidityAbsoluteWarning": "絕對流動性警告閾值",
+    "liquidityAbsoluteSafe": "絕對流動性安全閾值",
+    "liquidityAbsoluteForceOnLoss": "虧損時也強制賣出",
+    "liquidityAbsoluteForceOnLossTip": "啟用後，即使當前虧損也會強制賣出（保命優先）；關閉後，只有盈利時才觸發（避免割肉）",
     "timeDecayConfig": "時間衰減（短期市場）",
     "timeDecayEnabled": "啟用時間衰減",
     "timeDecayStartMinutes": "開始衰減時間",
@@ -1436,6 +1445,7 @@
       "takeProfit": "止盈",
       "stopLoss": "止損",
       "forcedLiquidity": "流動性強制",
+      "forcedAbsoluteLiquidity": "絕對流動性強制",
       "forcedTime": "時間強制"
     },
     "logs": {

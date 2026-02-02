@@ -22,11 +22,18 @@ data class SmartTakeProfitConfigRequest(
     val stopLossThreshold: BigDecimal = BigDecimal("-20"),
     val stopLossRatio: BigDecimal = BigDecimal("100"),
     
-    // 流动性动态调整
+    // 流动性动态调整（相对流动性，按持仓比例）
     val liquidityAdjustEnabled: Boolean = true,
     val liquidityDangerRatio: BigDecimal = BigDecimal("0.3"),
     val liquidityWarningRatio: BigDecimal = BigDecimal("1.0"),
     val liquiditySafeRatio: BigDecimal = BigDecimal("3.0"),
+    
+    // 绝对流动性检查（按市场深度 USDC）
+    val liquidityAbsoluteEnabled: Boolean = false,
+    val liquidityAbsoluteDanger: BigDecimal = BigDecimal("300"),
+    val liquidityAbsoluteWarning: BigDecimal = BigDecimal("1000"),
+    val liquidityAbsoluteSafe: BigDecimal = BigDecimal("3000"),
+    val liquidityAbsoluteForceOnLoss: Boolean = true,
     
     // 时间衰减
     val timeDecayEnabled: Boolean = true,
@@ -66,11 +73,18 @@ data class SmartTakeProfitConfigResponse(
     val stopLossThreshold: String = "-20",
     val stopLossRatio: String = "100",
     
-    // 流动性动态调整
+    // 流动性动态调整（相对流动性，按持仓比例）
     val liquidityAdjustEnabled: Boolean = true,
     val liquidityDangerRatio: String = "0.3",
     val liquidityWarningRatio: String = "1.0",
     val liquiditySafeRatio: String = "3.0",
+    
+    // 绝对流动性检查（按市场深度 USDC）
+    val liquidityAbsoluteEnabled: Boolean = false,
+    val liquidityAbsoluteDanger: String = "300",
+    val liquidityAbsoluteWarning: String = "1000",
+    val liquidityAbsoluteSafe: String = "3000",
+    val liquidityAbsoluteForceOnLoss: Boolean = true,
     
     // 时间衰减
     val timeDecayEnabled: Boolean = true,

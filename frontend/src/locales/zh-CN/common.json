@@ -1406,6 +1406,15 @@
     "liquidityDangerRatioTip": "当订单簿深度 < 持仓价值 × 此值时，立即触发止盈",
     "liquidityWarningRatio": "流动性警告阈值",
     "liquiditySafeRatio": "流动性安全阈值",
+    "absoluteLiquidityTitle": "绝对流动性检查（按市场深度）",
+    "absoluteLiquidityDesc": "当市场买盘深度低于设定阈值时触发强制卖出，不受持仓大小影响。适合过滤低流动性市场。",
+    "liquidityAbsoluteEnabled": "启用绝对流动性检查",
+    "liquidityAbsoluteDanger": "绝对流动性危险阈值",
+    "liquidityAbsoluteDangerTip": "当市场买盘深度低于此值时，立即触发强制卖出",
+    "liquidityAbsoluteWarning": "绝对流动性警告阈值",
+    "liquidityAbsoluteSafe": "绝对流动性安全阈值",
+    "liquidityAbsoluteForceOnLoss": "亏损时也强制卖出",
+    "liquidityAbsoluteForceOnLossTip": "启用后，即使当前亏损也会强制卖出（保命优先）；关闭后，只有盈利时才触发（避免割肉）",
     "timeDecayConfig": "时间衰减（短期市场）",
     "timeDecayEnabled": "启用时间衰减",
     "timeDecayStartMinutes": "开始衰减时间",
@@ -1436,6 +1445,7 @@
       "takeProfit": "止盈",
       "stopLoss": "止损",
       "forcedLiquidity": "流动性强制",
+      "forcedAbsoluteLiquidity": "绝对流动性强制",
       "forcedTime": "时间强制"
     },
     "logs": {

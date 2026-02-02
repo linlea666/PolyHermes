@@ -104,6 +104,12 @@ class SmartTakeProfitService(
                 liquidityDangerRatio = request.liquidityDangerRatio
                 liquidityWarningRatio = request.liquidityWarningRatio
                 liquiditySafeRatio = request.liquiditySafeRatio
+                // 绝对流动性字段
+                liquidityAbsoluteEnabled = request.liquidityAbsoluteEnabled
+                liquidityAbsoluteDanger = request.liquidityAbsoluteDanger
+                liquidityAbsoluteWarning = request.liquidityAbsoluteWarning
+                liquidityAbsoluteSafe = request.liquidityAbsoluteSafe
+                liquidityAbsoluteForceOnLoss = request.liquidityAbsoluteForceOnLoss
                 timeDecayEnabled = request.timeDecayEnabled
                 timeDecayStartMinutes = request.timeDecayStartMinutes
                 timeDecayUrgentMinutes = request.timeDecayUrgentMinutes
@@ -133,6 +139,12 @@ class SmartTakeProfitService(
                 liquidityDangerRatio = request.liquidityDangerRatio,
                 liquidityWarningRatio = request.liquidityWarningRatio,
                 liquiditySafeRatio = request.liquiditySafeRatio,
+                // 绝对流动性字段
+                liquidityAbsoluteEnabled = request.liquidityAbsoluteEnabled,
+                liquidityAbsoluteDanger = request.liquidityAbsoluteDanger,
+                liquidityAbsoluteWarning = request.liquidityAbsoluteWarning,
+                liquidityAbsoluteSafe = request.liquidityAbsoluteSafe,
+                liquidityAbsoluteForceOnLoss = request.liquidityAbsoluteForceOnLoss,
                 timeDecayEnabled = request.timeDecayEnabled,
                 timeDecayStartMinutes = request.timeDecayStartMinutes,
                 timeDecayUrgentMinutes = request.timeDecayUrgentMinutes,
@@ -456,6 +468,13 @@ class SmartTakeProfitService(
     
     /**
      * 检查是否触发止盈止损
+     * 
+     * 触发优先级：
+     * 1. 绝对流动性危险（市场深度不足）- 可配置是否不管盈亏
+     * 2. 相对流动性危险（仓位相对过大）- 只有盈利时触发
+     * 3. 时间紧迫（市场即将结束）
+     * 4. 止损
+     * 5. 止盈
      */
     private fun checkTrigger(
         config: SmartTakeProfitConfig,
@@ -469,7 +488,32 @@ class SmartTakeProfitService(
             assessment.liquidityCoef.min(assessment.timeCoef).coerceAtLeast(BigDecimal.ZERO)
         )
         
-        // 1. 检查强制触发条件（流动性危险或时间紧迫）
+        // 1. 检查绝对流动性（按市场深度 USDC）
+        if (config.liquidityAbsoluteEnabled && assessment.orderbookBidDepth < config.liquidityAbsoluteDanger) {
+            // 市场买盘深度低于危险阈值
+            val shouldTrigger = if (config.liquidityAbsoluteForceOnLoss) {
+                // 不管盈亏都卖（保命优先）
+                true
+            } else {
+                // 只有盈利时才卖（避免割肉）
+                currentPnlPercent > BigDecimal.ZERO
+            }
+            
+            if (shouldTrigger) {
+                logger.info(
+                    "绝对流动性触发: accountId=${config.accountId}, marketId=${position.marketId}, " +
+                    "bidDepth=${assessment.orderbookBidDepth}, dangerThreshold=${config.liquidityAbsoluteDanger}, " +
+                    "pnl=$currentPnlPercent%, forceOnLoss=${config.liquidityAbsoluteForceOnLoss}"
+                )
+                return TriggerResult(
+                    triggered = true,
+                    triggerType = "FORCED_ABSOLUTE_LIQUIDITY",
+                    dynamicThreshold = BigDecimal.ZERO
+                )
+            }
+        }
+        
+        // 2. 检查相对流动性（按持仓比例）
         if (assessment.liquidityCoef <= BigDecimal.ZERO) {
             // 流动性危险，有盈利就触发
             if (currentPnlPercent > BigDecimal.ZERO) {
@@ -481,6 +525,7 @@ class SmartTakeProfitService(
             }
         }
         
+        // 3. 检查时间紧迫
         if (assessment.timeCoef <= BigDecimal.ZERO) {
             // 时间紧迫，有盈利就触发（或接受小亏损）
             val emergencyThreshold = if (assessment.timeCoef < BigDecimal.ZERO) {
@@ -499,7 +544,7 @@ class SmartTakeProfitService(
             }
         }
         
-        // 2. 检查止损条件
+        // 4. 检查止损条件
         if (config.stopLossEnabled && currentPnlPercent <= config.stopLossThreshold) {
             return TriggerResult(
                 triggered = true,
@@ -508,7 +553,7 @@ class SmartTakeProfitService(
             )
         }
         
-        // 3. 检查止盈条件
+        // 5. 检查止盈条件
         if (config.takeProfitEnabled && currentPnlPercent >= dynamicThreshold) {
             return TriggerResult(
                 triggered = true,
@@ -532,7 +577,7 @@ class SmartTakeProfitService(
         // 计算卖出比例
         val sellRatio = when (triggerResult.triggerType) {
             "STOP_LOSS" -> config.stopLossRatio
-            "FORCED_LIQUIDITY", "FORCED_TIME" -> BigDecimal("100")  // 强制全部卖出
+            "FORCED_LIQUIDITY", "FORCED_ABSOLUTE_LIQUIDITY", "FORCED_TIME" -> BigDecimal("100")  // 强制全部卖出
             else -> {
                 // 止盈：考虑保留底仓
                 val maxSellRatio = BigDecimal("100").subtract(config.takeProfitKeepRatio)
@@ -1133,6 +1178,12 @@ class SmartTakeProfitService(
             liquidityDangerRatio = config.liquidityDangerRatio.toPlainString(),
             liquidityWarningRatio = config.liquidityWarningRatio.toPlainString(),
             liquiditySafeRatio = config.liquiditySafeRatio.toPlainString(),
+            // 绝对流动性字段
+            liquidityAbsoluteEnabled = config.liquidityAbsoluteEnabled,
+            liquidityAbsoluteDanger = config.liquidityAbsoluteDanger.toPlainString(),
+            liquidityAbsoluteWarning = config.liquidityAbsoluteWarning.toPlainString(),
+            liquidityAbsoluteSafe = config.liquidityAbsoluteSafe.toPlainString(),
+            liquidityAbsoluteForceOnLoss = config.liquidityAbsoluteForceOnLoss,
             timeDecayEnabled = config.timeDecayEnabled,
             timeDecayStartMinutes = config.timeDecayStartMinutes,
             timeDecayUrgentMinutes = config.timeDecayUrgentMinutes,

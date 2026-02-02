@@ -1003,11 +1003,18 @@ export interface SmartTakeProfitConfig {
   stopLossThreshold: string
   stopLossRatio: string
   
-  // 流动性动态调整
+  // 流动性动态调整（相对流动性）
   liquidityAdjustEnabled: boolean
   liquidityDangerRatio: string
   liquidityWarningRatio: string
   liquiditySafeRatio: string
+  
+  // 绝对流动性检查（按市场深度 USDC）
+  liquidityAbsoluteEnabled: boolean
+  liquidityAbsoluteDanger: string
+  liquidityAbsoluteWarning: string
+  liquidityAbsoluteSafe: string
+  liquidityAbsoluteForceOnLoss: boolean
   
   // 时间衰减
   timeDecayEnabled: boolean
@@ -1048,6 +1055,13 @@ export interface SmartTakeProfitConfigRequest {
   liquidityDangerRatio?: string
   liquidityWarningRatio?: string
   liquiditySafeRatio?: string
+  
+  // 绝对流动性检查
+  liquidityAbsoluteEnabled?: boolean
+  liquidityAbsoluteDanger?: string
+  liquidityAbsoluteWarning?: string
+  liquidityAbsoluteSafe?: string
+  liquidityAbsoluteForceOnLoss?: boolean
   
   timeDecayEnabled?: boolean
   timeDecayStartMinutes?: number

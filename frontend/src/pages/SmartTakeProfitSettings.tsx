@@ -85,6 +85,12 @@ const SmartTakeProfitSettings: React.FC = () => {
             liquidityDangerRatio: parseFloat(configData.liquidityDangerRatio),
             liquidityWarningRatio: parseFloat(configData.liquidityWarningRatio),
             liquiditySafeRatio: parseFloat(configData.liquiditySafeRatio),
+            // 绝对流动性字段
+            liquidityAbsoluteEnabled: configData.liquidityAbsoluteEnabled,
+            liquidityAbsoluteDanger: parseFloat(configData.liquidityAbsoluteDanger),
+            liquidityAbsoluteWarning: parseFloat(configData.liquidityAbsoluteWarning),
+            liquidityAbsoluteSafe: parseFloat(configData.liquidityAbsoluteSafe),
+            liquidityAbsoluteForceOnLoss: configData.liquidityAbsoluteForceOnLoss,
             timeDecayEnabled: configData.timeDecayEnabled,
             timeDecayStartMinutes: configData.timeDecayStartMinutes,
             timeDecayUrgentMinutes: configData.timeDecayUrgentMinutes,
@@ -112,6 +118,12 @@ const SmartTakeProfitSettings: React.FC = () => {
             liquidityDangerRatio: 0.3,
             liquidityWarningRatio: 1.0,
             liquiditySafeRatio: 3.0,
+            // 绝对流动性默认值（默认关闭）
+            liquidityAbsoluteEnabled: false,
+            liquidityAbsoluteDanger: 300,
+            liquidityAbsoluteWarning: 1000,
+            liquidityAbsoluteSafe: 3000,
+            liquidityAbsoluteForceOnLoss: true,
             timeDecayEnabled: true,
             timeDecayStartMinutes: 30,
             timeDecayUrgentMinutes: 5,
@@ -212,6 +224,12 @@ const SmartTakeProfitSettings: React.FC = () => {
         liquidityDangerRatio: safeString(values.liquidityDangerRatio, '0.3'),
         liquidityWarningRatio: safeString(values.liquidityWarningRatio, '1.0'),
         liquiditySafeRatio: safeString(values.liquiditySafeRatio, '3.0'),
+        // 绝对流动性字段
+        liquidityAbsoluteEnabled: Boolean(values.liquidityAbsoluteEnabled),
+        liquidityAbsoluteDanger: safeString(values.liquidityAbsoluteDanger, '300'),
+        liquidityAbsoluteWarning: safeString(values.liquidityAbsoluteWarning, '1000'),
+        liquidityAbsoluteSafe: safeString(values.liquidityAbsoluteSafe, '3000'),
+        liquidityAbsoluteForceOnLoss: Boolean(values.liquidityAbsoluteForceOnLoss),
         timeDecayEnabled: Boolean(values.timeDecayEnabled),
         timeDecayStartMinutes: safeNumber(values.timeDecayStartMinutes, 30),
         timeDecayUrgentMinutes: safeNumber(values.timeDecayUrgentMinutes, 5),
@@ -265,6 +283,7 @@ const SmartTakeProfitSettings: React.FC = () => {
       case 'TAKE_PROFIT': return t('smartTakeProfit.triggerType.takeProfit')
       case 'STOP_LOSS': return t('smartTakeProfit.triggerType.stopLoss')
       case 'FORCED_LIQUIDITY': return t('smartTakeProfit.triggerType.forcedLiquidity')
+      case 'FORCED_ABSOLUTE_LIQUIDITY': return t('smartTakeProfit.triggerType.forcedAbsoluteLiquidity')
       case 'FORCED_TIME': return t('smartTakeProfit.triggerType.forcedTime')
       default: return type
     }
@@ -609,6 +628,91 @@ const SmartTakeProfitSettings: React.FC = () => {
                 style={{ width: '100%' }}
               />
             </Form.Item>
+            
+            {/* 绝对流动性配置（按市场深度 USDC） */}
+            <div style={{ 
+              marginTop: 24, 
+              padding: 16, 
+              background: '#f5f5f5', 
+              borderRadius: 8,
+              border: '1px solid #e8e8e8'
+            }}>
+              <Text strong style={{ display: 'block', marginBottom: 16 }}>
+                {t('smartTakeProfit.absoluteLiquidityTitle')}
+              </Text>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+                {t('smartTakeProfit.absoluteLiquidityDesc')}
+              </Text>
+              
+              <Form.Item
+                name="liquidityAbsoluteEnabled"
+                label={t('smartTakeProfit.liquidityAbsoluteEnabled')}
+                valuePropName="checked"
+              >
+                <Switch />
+              </Form.Item>
+              
+              <Form.Item
+                name="liquidityAbsoluteDanger"
+                label={
+                  <Space>
+                    {t('smartTakeProfit.liquidityAbsoluteDanger')}
+                    <Tooltip title={t('smartTakeProfit.liquidityAbsoluteDangerTip')}>
+                      <QuestionCircleOutlined />
+                    </Tooltip>
+                  </Space>
+                }
+              >
+                <InputNumber
+                  min={10}
+                  max={100000}
+                  step={100}
+                  addonAfter="USDC"
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+              
+              <Form.Item
+                name="liquidityAbsoluteWarning"
+                label={t('smartTakeProfit.liquidityAbsoluteWarning')}
+              >
+                <InputNumber
+                  min={10}
+                  max={100000}
+                  step={100}
+                  addonAfter="USDC"
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+              
+              <Form.Item
+                name="liquidityAbsoluteSafe"
+                label={t('smartTakeProfit.liquidityAbsoluteSafe')}
+              >
+                <InputNumber
+                  min={100}
+                  max={100000}
+                  step={500}
+                  addonAfter="USDC"
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+              
+              <Form.Item
+                name="liquidityAbsoluteForceOnLoss"
+                label={
+                  <Space>
+                    {t('smartTakeProfit.liquidityAbsoluteForceOnLoss')}
+                    <Tooltip title={t('smartTakeProfit.liquidityAbsoluteForceOnLossTip')}>
+                      <QuestionCircleOutlined />
+                    </Tooltip>
+                  </Space>
+                }
+                valuePropName="checked"
+              >
+                <Switch />
+              </Form.Item>
+            </div>
           </Panel>
           
           {/* 时间衰减 */}

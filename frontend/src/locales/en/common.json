@@ -1406,6 +1406,15 @@
     "liquidityDangerRatioTip": "Immediately triggers take profit when orderbook depth < position value × this ratio",
     "liquidityWarningRatio": "Liquidity Warning Ratio",
     "liquiditySafeRatio": "Liquidity Safe Ratio",
+    "absoluteLiquidityTitle": "Absolute Liquidity Check (By Market Depth)",
+    "absoluteLiquidityDesc": "Triggers forced sell when market bid depth falls below threshold, regardless of position size. Useful for filtering low-liquidity markets.",
+    "liquidityAbsoluteEnabled": "Enable Absolute Liquidity Check",
+    "liquidityAbsoluteDanger": "Absolute Liquidity Danger Threshold",
+    "liquidityAbsoluteDangerTip": "Immediately triggers forced sell when market bid depth falls below this value",
+    "liquidityAbsoluteWarning": "Absolute Liquidity Warning Threshold",
+    "liquidityAbsoluteSafe": "Absolute Liquidity Safe Threshold",
+    "liquidityAbsoluteForceOnLoss": "Force Sell Even on Loss",
+    "liquidityAbsoluteForceOnLossTip": "When enabled, forces sell even if currently at loss (safety first); when disabled, only triggers when profitable (avoid cutting losses)",
     "timeDecayConfig": "Time Decay (Short-term Markets)",
     "timeDecayEnabled": "Enable Time Decay",
     "timeDecayStartMinutes": "Decay Start Time",
@@ -1436,6 +1445,7 @@
       "takeProfit": "Take Profit",
       "stopLoss": "Stop Loss",
       "forcedLiquidity": "Forced (Liquidity)",
+      "forcedAbsoluteLiquidity": "Forced (Absolute Liquidity)",
       "forcedTime": "Forced (Time)"
     },
     "logs": {

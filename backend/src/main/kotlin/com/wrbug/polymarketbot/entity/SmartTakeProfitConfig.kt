@@ -98,6 +98,39 @@ data class SmartTakeProfitConfig(
     @Column(name = "liquidity_safe_ratio", nullable = false, precision = 10, scale = 4)
     var liquiditySafeRatio: BigDecimal = BigDecimal("3.0"),
     
+    // ===== 绝对流动性检查（按市场深度）=====
+    
+    /** 是否启用绝对流动性检查（默认关闭） */
+    @Column(name = "liquidity_absolute_enabled", nullable = false)
+    var liquidityAbsoluteEnabled: Boolean = false,
+    
+    /** 
+     * 绝对流动性危险阈值（USDC）
+     * 当市场买盘深度 < 此值时，触发强制卖出
+     */
+    @Column(name = "liquidity_absolute_danger", nullable = false, precision = 20, scale = 2)
+    var liquidityAbsoluteDanger: BigDecimal = BigDecimal("300"),
+    
+    /** 
+     * 绝对流动性警告阈值（USDC）
+     */
+    @Column(name = "liquidity_absolute_warning", nullable = false, precision = 20, scale = 2)
+    var liquidityAbsoluteWarning: BigDecimal = BigDecimal("1000"),
+    
+    /** 
+     * 绝对流动性安全阈值（USDC）
+     */
+    @Column(name = "liquidity_absolute_safe", nullable = false, precision = 20, scale = 2)
+    var liquidityAbsoluteSafe: BigDecimal = BigDecimal("3000"),
+    
+    /** 
+     * 绝对流动性触发时是否不管盈亏都卖出
+     * true: 不管盈亏都卖（保命优先）
+     * false: 只有盈利时才卖（避免割肉）
+     */
+    @Column(name = "liquidity_absolute_force_on_loss", nullable = false)
+    var liquidityAbsoluteForceOnLoss: Boolean = true,
+    
     // ===== 时间衰减（短期市场）=====
     
     /** 时间衰减开关 */
